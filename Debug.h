@@ -6,6 +6,7 @@
 // If it is active
 #ifdef DBG_ACTIVE
 
+
 // Structs
 typedef struct __DBG_Stats DBG_Stats;
 typedef struct __DBG_Session DBG_Session;
