@@ -1,10 +1,78 @@
 #ifndef DEBUG_H_INCLUDED
 #define DEBUG_H_INCLUDED
 
-#include <stdinc.h>
+#include <stdio.h>
 
+#define DBG_ACTIVE
 // If it is active
 #ifdef DBG_ACTIVE
+
+#include <stdint.h>
+#include <stdbool.h>
+
+
+
+// Structs
+typedef struct __DBG_Session DBG_Session;
+typedef struct __DBG_FunctionData DBG_FunctionData;
+
+// Data for a session, a session starts when a function is executed and ends when the function is done
+struct __DBG_Session
+{
+    uint32_t ID;            // The id of the session, maps to a function name in the DBG_FunctionList list.
+    uint64_t startTime;     // What time it started the session
+    uint64_t subTime;       // How much time has been used in subfunctions
+    uint64_t removeTime;    // How much time has been used by DBG functions inside this session
+    uint64_t removeSubTime; // How much time has been used by DBG functions inside children sessions of this session
+    DBG_Session *child;     // What session is running inside this session, NULL if it doesn't have another session running
+    DBG_Session *parent;    // What session is this session running in, NULL if it doesn't run in another session
+    uint32_t depth;         // How many sessions are above this one, 1 when there are none above it
+};
+
+// All the important data for the functions used
+struct __DBG_FunctionData
+{
+    uint32_t ID;            // The id of the session, this is where in the list it is
+    char *name;             // The name of the function
+    uint32_t count;         // The number of times this function has been executed
+    uint64_t *time;         // List of time spent in each of the sessions without time in sub sessions
+    uint64_t *subTime;      // List of time spent in each of the sessions with time in sub sessions
+};
+
+// global variables
+// The outer most session, NULL if no session has been started
+DBG_Session *DBG_FirstSession = NULL;
+
+// List of all the functions
+DBG_FunctionData DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .time = NULL, .subTime = NULL};
+DBG_FunctionData **DBG_Functions = NULL;
+
+// Function declarations
+uint32_t DBG_Init(void);
+
+// Functions
+// Initialises debugging
+uint32_t DBG_Init(void)
+{
+    // Make sure it has not been initialised already
+    if (DBG_Functions != NULL)
+        return;
+
+    // Allocate memory for the functions
+    DBG_Functions = (DBG_FunctionData **)malloc(sizeof(DBG_FunctionData));
+
+    if (DBG_Functions == NULL)
+    {
+
+    }
+}
+
+
+
+
+
+
+
 
 
 // Structs
