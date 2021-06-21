@@ -1,12 +1,30 @@
-#ifndef DEBUG_H_INCLUDED
-#define DEBUG_H_INCLUDED
-
-#include <stdio.h>
-
-#define DBG_ACTIVE
+//#define DBG_ACTIVE
 // If it is active
 #ifdef DBG_ACTIVE
+#ifndef DEBUG_ACTIVE_H_INCLUDED
+#define DEBUG_ACTIVE_H_INCLUDED
 
+#ifndef DEBUG_INACTIVE_H_INCLUDED
+
+#define DEBUG_INACTIVE_H_INCLUDED
+
+#else
+
+#ifdef DBG_GetError
+#undef DBG_GetError
+#endif
+
+#ifdef DBG_Init
+#undef DBG_Init
+#endif
+
+#ifdef DBG_Quit
+#undef DBG_Quit
+#endif
+
+#endif
+
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <errno.h>
@@ -15,7 +33,7 @@
 #ifdef DBG_EXITFUNC
 #define ERR_EXITFUNC DBG_EXITFUNC
 #else
-void DBG_Exit(uint32_t ErrorID) 
+void DBG_ExitFunc(uint32_t ErrorID) 
 {
     extern FILE *_DBG_ErrorLog;
     
@@ -24,6 +42,7 @@ void DBG_Exit(uint32_t ErrorID)
     
     exit(ErrorID);
 }
+#define ERR_EXITFUNC &DBG_ExitFunc
 #endif
 
 #define ERR_PREFIX DBG
@@ -81,7 +100,7 @@ enum _DBG_Flags
 
 // global variables
 // The outer most session, NULL if no session has been started
-DBG_Session *_DBG_FirstSession = NULL;
+_DBG_Session *_DBG_FirstSession = NULL;
 
 // List of all the functions
 _DBG_FunctionData _DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .time = NULL, .subTime = NULL};
@@ -189,14 +208,22 @@ void BDG_Quit(void)
     _DBG_ErrorLog = NULL;
 }
 
+#endif
+#else
+#ifdef DEBUG_INACTIVE_H_INCLUDED
+#define DEBUG_INACTIVE_H_INCLUDED
 
+// Error function should always return NULL
+#define DBG_GetError() NULL
 
+// Init and quit should alwas return no error
+#define DBG_Init(ErrorLog, Flags) 0
+#define DBG_Quit()
 
+#endif
+#endif
 
-
-
-
-
+/*
 // Structs
 typedef struct __DBG_Stats DBG_Stats;
 typedef struct __DBG_Session DBG_Session;
@@ -1454,3 +1481,5 @@ int32_t _DBG_CompareTimeMaxExcl(DBG_Stats *Stats1, DBG_Stats *Stats2)
 
 #endif
 #endif
+*/
+
