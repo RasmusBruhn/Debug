@@ -9,8 +9,16 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <errno.h>
 
+#ifdef DBG_EXITFUNC
+#define ERR_EXITFUNC DBG_EXITFUNC
+#endif
 
+#define ERR_PREFIX DBG
+#define ERR_MAXLENGTH 1000
+#define ERR_MAXARCHIVED 100
+#include <Error.h>
 
 // Structs
 typedef struct __DBG_Session DBG_Session;
@@ -39,6 +47,17 @@ struct __DBG_FunctionData
     uint64_t *subTime;      // List of time spent in each of the sessions with time in sub sessions
 };
 
+// Contants
+// Errors
+enum DBG_ErrorID 
+{
+    DBG_ERRORID_NOERROR = 0x00000000,
+    DBG_ERRORID_INIT_MEMORY = 0x00010300
+};
+
+#define DBG_ERRORMES_MEMORY "Unable to allocate memory"
+
+
 // global variables
 // The outer most session, NULL if no session has been started
 DBG_Session *DBG_FirstSession = NULL;
@@ -54,6 +73,8 @@ uint32_t DBG_Init(void);
 // Initialises debugging
 uint32_t DBG_Init(void)
 {
+    extern DBG_FunctionData **DBG_Functions;
+
     // Make sure it has not been initialised already
     if (DBG_Functions != NULL)
         return;
@@ -63,8 +84,14 @@ uint32_t DBG_Init(void)
 
     if (DBG_Functions == NULL)
     {
-
+        _DBG_AddErrorForeign(DBG_ERRORID_INIT_MEMORY, strerror(errno), DBG_ERRORMES_MEMORY);
+        return DBG_ERRORID_INIT_MEMORY;
     }
+
+    // Setup the main function
+    DBG_Functions[0] = &DBG_FunctionMain;
+
+    return DBG_ERRORID_NOERROR;
 }
 
 
