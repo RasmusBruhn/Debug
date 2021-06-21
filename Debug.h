@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <time.h>
 
 #ifdef DBG_EXITFUNC
 #define ERR_EXITFUNC DBG_EXITFUNC
@@ -21,8 +22,8 @@
 #include <Error.h>
 
 // Structs
-typedef struct __DBG_Session DBG_Session;
-typedef struct __DBG_FunctionData DBG_FunctionData;
+typedef struct __DBG_Session _DBG_Session;
+typedef struct __DBG_FunctionData _DBG_FunctionData;
 
 // Data for a session, a session starts when a function is executed and ends when the function is done
 struct __DBG_Session
@@ -32,8 +33,8 @@ struct __DBG_Session
     uint64_t subTime;       // How much time has been used in subfunctions
     uint64_t removeTime;    // How much time has been used by DBG functions inside this session
     uint64_t removeSubTime; // How much time has been used by DBG functions inside children sessions of this session
-    DBG_Session *child;     // What session is running inside this session, NULL if it doesn't have another session running
-    DBG_Session *parent;    // What session is this session running in, NULL if it doesn't run in another session
+    _DBG_Session *child;     // What session is running inside this session, NULL if it doesn't have another session running
+    _DBG_Session *parent;    // What session is this session running in, NULL if it doesn't run in another session
     uint32_t depth;         // How many sessions are above this one, 1 when there are none above it
 };
 
@@ -49,49 +50,110 @@ struct __DBG_FunctionData
 
 // Contants
 // Errors
-enum DBG_ErrorID 
+enum _DBG_ErrorID 
 {
     DBG_ERRORID_NOERROR = 0x00000000,
-    DBG_ERRORID_INIT_MEMORY = 0x00010300
+    DBG_ERRORID_INIT_MEMORY = 0x00010300,
+    DBG_ERRORID_QUIT_INIT = 0x00020100,
+    DBG_ERRORID_QUIT_NULL = 0x00020101
 };
 
-#define DBG_ERRORMES_MEMORY "Unable to allocate memory"
+#define _DBG_ERRORMES_MEMORY "Unable to allocate memory"
+#define _DBG_ERRORMES_NOINIT "Debugging has not been initialised"
+#define _DBG_ERRORMES_FOUNDNULL "Found a stray NULL pointer in %s"
+
+// Flags
+enum _DBG_Flags
+{
+    DBG_FLAG_NOFLAG = 0
+};
 
 
 // global variables
 // The outer most session, NULL if no session has been started
-DBG_Session *DBG_FirstSession = NULL;
+DBG_Session *_DBG_FirstSession = NULL;
 
 // List of all the functions
-DBG_FunctionData DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .time = NULL, .subTime = NULL};
-DBG_FunctionData **DBG_Functions = NULL;
+_DBG_FunctionData _DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .time = NULL, .subTime = NULL};
+_DBG_FunctionData **_DBG_Functions = NULL;
+uint32_t _DBG_FunctionCount = 0;
+
+// Flags for what to save
+uint64_t _DBG_UsedFlags = 0;
 
 // Function declarations
-uint32_t DBG_Init(void);
+// Initialises debugging
+// Returns 0 on success and an error code on failure
+uint32_t DBG_Init(uint64_t Flags);
+
+// Closes down everything and frees allocated memory
+void BDG_Quit(void);
+
+uint32_t DBG_StartSession(char *Name);
+
+uint32_t DBG_EndSession(void);
 
 // Functions
-// Initialises debugging
-uint32_t DBG_Init(void)
+uint32_t DBG_Init(uint64_t Flags)
 {
-    extern DBG_FunctionData **DBG_Functions;
+    extern _DBG_FunctionData **_DBG_Functions;
+    extern uint32_t _DBG_FunctionCount;
+    extern uint64_t _DBG_UsedFlags;
 
     // Make sure it has not been initialised already
-    if (DBG_Functions != NULL)
+    if (_DBG_Functions != NULL)
         return;
 
     // Allocate memory for the functions
-    DBG_Functions = (DBG_FunctionData **)malloc(sizeof(DBG_FunctionData));
+    _DBG_Functions = (_DBG_FunctionData **)malloc(sizeof(_DBG_FunctionData));
 
-    if (DBG_Functions == NULL)
+    if (_DBG_Functions == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_INIT_MEMORY, strerror(errno), DBG_ERRORMES_MEMORY);
+        _DBG_AddErrorForeign(DBG_ERRORID_INIT_MEMORY, strerror(errno), _DBG_ERRORMES_MEMORY);
         return DBG_ERRORID_INIT_MEMORY;
     }
 
+    _DBG_FunctionCount = 1;
+
     // Setup the main function
-    DBG_Functions[0] = &DBG_FunctionMain;
+    _DBG_Functions[0] = &_DBG_FunctionMain;
+
+    // Setup flags
+    _DBG_UsedFlags = Flags;
 
     return DBG_ERRORID_NOERROR;
+}
+
+void BDG_Quit(void)
+{
+    extern _DBG_FunctionData **_DBG_Functions;
+    extern uint32_t _DBG_FunctionCount;
+    extern uint64_t _DBG_UsedFlags;
+
+    // Make sure it has been initialised
+    if (_DBG_Functions == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_QUIT_INIT, _DBG_ERRORMES_NOINIT);
+        return;
+    }
+
+    // Free all of the functions
+    for (_DBG_FunctionData **DataList = DBG_Functions, **DataListEnd = _DBG_Functions + _DBG_FunctionCount; DataList < DataListEnd; ++DataList)
+    {
+        if (*DataList != NULL)
+            free(*DataList);
+        
+        else
+            _DBG_SetError(DBG_ERRORID_QUIT_NULL, _DBG_ERRORMES_FOUNDNULL, "_DBG_Functions");
+    }
+
+    // Free the functions list
+    free(_DBG_Functions);
+
+    // Reset values
+    _DBG_FunctionCount = 0;
+    _DBG_Functions = NULL;
+    _DBG_UsedFlags = 0;
 }
 
 
