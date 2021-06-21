@@ -14,6 +14,16 @@
 
 #ifdef DBG_EXITFUNC
 #define ERR_EXITFUNC DBG_EXITFUNC
+#else
+void DBG_Exit(uint32_t ErrorID) 
+{
+    extern FILE *_DBG_ErrorLog;
+    
+    if (_DBG_ErrorLog != NULL)
+        fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
+    
+    exit(ErrorID);
+}
 #endif
 
 #define ERR_PREFIX DBG
@@ -53,9 +63,9 @@ struct __DBG_FunctionData
 enum _DBG_ErrorID 
 {
     DBG_ERRORID_NOERROR = 0x00000000,
-    DBG_ERRORID_INIT_MEMORY = 0x00010300,
-    DBG_ERRORID_QUIT_INIT = 0x00020100,
-    DBG_ERRORID_QUIT_NULL = 0x00020101
+    DBG_ERRORID_INIT_MEMORY = 0x01010300,
+    DBG_ERRORID_QUIT_INIT = 0x01020100,
+    DBG_ERRORID_QUIT_NULL = 0x01020101
 };
 
 #define _DBG_ERRORMES_MEMORY "Unable to allocate memory"
@@ -81,10 +91,13 @@ uint32_t _DBG_FunctionCount = 0;
 // Flags for what to save
 uint64_t _DBG_UsedFlags = 0;
 
+// File to write errors to
+FILE *_DBG_ErrorLog = NULL;
+
 // Function declarations
 // Initialises debugging
 // Returns 0 on success and an error code on failure
-uint32_t DBG_Init(uint64_t Flags);
+uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags);
 
 // Closes down everything and frees allocated memory
 void BDG_Quit(void);
@@ -94,15 +107,19 @@ uint32_t DBG_StartSession(char *Name);
 uint32_t DBG_EndSession(void);
 
 // Functions
-uint32_t DBG_Init(uint64_t Flags)
+uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
 {
     extern _DBG_FunctionData **_DBG_Functions;
     extern uint32_t _DBG_FunctionCount;
     extern uint64_t _DBG_UsedFlags;
+    extern FILE *_DBG_ErrorLog;
 
     // Make sure it has not been initialised already
     if (_DBG_Functions != NULL)
         return;
+
+    // Set error log file
+    _DBG_ErrorLog = ErrorLog;
 
     // Allocate memory for the functions
     _DBG_Functions = (_DBG_FunctionData **)malloc(sizeof(_DBG_FunctionData));
@@ -110,6 +127,11 @@ uint32_t DBG_Init(uint64_t Flags)
     if (_DBG_Functions == NULL)
     {
         _DBG_AddErrorForeign(DBG_ERRORID_INIT_MEMORY, strerror(errno), _DBG_ERRORMES_MEMORY);
+
+        if (_DBG_ErrorLog != NULL)
+            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
+
+        _DBG_ErrorLog = NULL;
         return DBG_ERRORID_INIT_MEMORY;
     }
 
@@ -129,22 +151,32 @@ void BDG_Quit(void)
     extern _DBG_FunctionData **_DBG_Functions;
     extern uint32_t _DBG_FunctionCount;
     extern uint64_t _DBG_UsedFlags;
+    extern FILE *_DBG_ErrorLog;
 
     // Make sure it has been initialised
     if (_DBG_Functions == NULL)
     {
         _DBG_SetError(DBG_ERRORID_QUIT_INIT, _DBG_ERRORMES_NOINIT);
+
+        if (_DBG_ErrorLog != NULL)
+            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
+
         return;
     }
 
     // Free all of the functions
-    for (_DBG_FunctionData **DataList = DBG_Functions, **DataListEnd = _DBG_Functions + _DBG_FunctionCount; DataList < DataListEnd; ++DataList)
+    for (_DBG_FunctionData **DataList = _DBG_Functions, **DataListEnd = _DBG_Functions + _DBG_FunctionCount; DataList < DataListEnd; ++DataList)
     {
         if (*DataList != NULL)
             free(*DataList);
         
         else
+        {
             _DBG_SetError(DBG_ERRORID_QUIT_NULL, _DBG_ERRORMES_FOUNDNULL, "_DBG_Functions");
+
+            if (_DBG_ErrorLog != NULL)
+                fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
+        }
     }
 
     // Free the functions list
@@ -154,6 +186,7 @@ void BDG_Quit(void)
     _DBG_FunctionCount = 0;
     _DBG_Functions = NULL;
     _DBG_UsedFlags = 0;
+    _DBG_ErrorLog = NULL;
 }
 
 
