@@ -41,8 +41,8 @@ void DBG_ExitFunc(uint32_t ErrorID);
 #define ERR_MAXARCHIVED 100
 #include <Error.h>
 
-    // Structs
-    typedef struct __DBG_Session _DBG_Session;
+// Structs
+typedef struct __DBG_Session _DBG_Session;
 typedef struct __DBG_FunctionData _DBG_FunctionData;
 
 // Data for a session, a session starts when a function is executed and ends when the function is done
@@ -53,9 +53,9 @@ struct __DBG_Session
     uint64_t subTime;       // How much time has been used in subfunctions
     uint64_t removeTime;    // How much time has been used by DBG functions inside this session
     uint64_t removeSubTime; // How much time has been used by DBG functions inside children sessions of this session
-    _DBG_Session *child;     // What session is running inside this session, NULL if it doesn't have another session running
-    _DBG_Session *parent;    // What session is this session running in, NULL if it doesn't run in another session
-    uint32_t depth;         // How many sessions are above this one, 1 when there are none above it
+    _DBG_Session *child;    // What session is running inside this session, NULL if it doesn't have another session running
+    _DBG_Session *parent;   // What session is this session running in, NULL if it doesn't run in another session
+    uint32_t depth;         // How many sessions are above this one, 0 when there are none above it
 };
 
 // All the important data for the functions used
@@ -70,13 +70,15 @@ struct __DBG_FunctionData
 
 // Contants
 // Errors
-enum _DBG_ErrorID 
+enum DBG_ErrorID
 {
     DBG_ERRORID_NOERROR = 0x00000000,
     DBG_ERRORID_INIT_MEMORY = 0x01010300,
     DBG_ERRORID_INIT_INIT = 0x01010101,
     DBG_ERRORID_QUIT_INIT = 0x01020100,
-    DBG_ERRORID_QUIT_NULL = 0x01020101
+    DBG_ERRORID_QUIT_NULL = 0x01020101,
+    DBG_ERRORID_CREATESESSION_MEMORY = 0x01030200,
+    DBG_ERRORID_CREATEFUNCTIONDATA_MEMORY = 0x01040200
 };
 
 #define _DBG_ERRORMES_MEMORY "Unable to allocate memory"
@@ -85,10 +87,13 @@ enum _DBG_ErrorID
 #define _DBG_ERRORMES_ALREADYINIT "Debugging has already been initialised"
 
 // Flags
-enum _DBG_Flags
+enum DBG_Flags
 {
     DBG_FLAG_NOFLAG = 0
 };
+
+// struct print max length
+#define DBG_PRINTSTRUCT_MAXLENGTH 1000
 
 
 // global variables
@@ -107,8 +112,41 @@ uint64_t _DBG_UsedFlags = 0;
 FILE *_DBG_ErrorLog = NULL;
 
 // Function declarations
+// Allocates memory for and initialises a Session struct
+// Returns a pointer to the struct, NULL on error
+// ID: The ID of the session, what function it corresponds to in the function list
+// Parent: What session was this created inside, NULL if no session was above this
+// Depth: How many sessions are above this, 0 if none is above it
+_DBG_Session *_DBG_CreateSession(uint32_t ID, const _DBG_Session *Parent, uint32_t Depth);
+
+// Allocates memory for and initialises a FunctionData struct
+// Returns a pointer to the , NULL on error
+// ID: The ID of the function, where is it located in the function list
+// Name: What is the name of the function
+_DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, const char *Name);
+
+// Frees a Session struct and all memory allocated for it
+// Session: The struct to free
+void _DBG_DestroySession(_DBG_Session *Session);
+
+// Frees a FunctionData struct and all memory allocated for it
+// FunctionData: The struct to free
+void _DBG_DestroyFunctionData(_DBG_FunctionData *FunctionData);
+
+// Turns a Session struct into a string
+// Returns a pointer to the string
+// Session: The struct to turn into a string
+char *_DBG_PrintSession(const _DBG_Session *Session);
+
+// Turns a FunctionData struct into a string
+// Returns a pointer to the string
+// FunctionData: The struct to turn into a string
+char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData);
+
 // Initialises debugging
 // Returns 0 on success and an error code on failure
+// ErrorLog: A text file pointer to where it can write the error messages, NULL if it should not write any messages
+// Flags: Contains all the information for what data to save, options are from DBG_Flags
 uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags);
 
 // Closes down everything and frees allocated memory
@@ -123,10 +161,72 @@ void DBG_ExitFunc(uint32_t ErrorID)
 {
     extern FILE *_DBG_ErrorLog;
 
+    // Write to error log
     if (_DBG_ErrorLog != NULL)
         fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
 
+    // Exit
     exit(ErrorID);
+}
+
+_DBG_Session *_DBG_CreateSession(uint32_t ID, const _DBG_Session *Parent, uint32_t Depth)
+{
+    // Allocate memory
+    _DBG_Session *Session = (_DBG_Session *)malloc(sizeof(_DBG_Session));
+
+    if (Session == NULL)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATESESSION_MEMORY, strerror(errno), _DBG_ERRORMES_MEMORY);
+        return NULL;
+    }
+ 
+    // Set default values
+    Session->startTime = 0;
+    Session->subTime = 0;
+    Session->removeTime = 0;
+    Session->removeSubTime = 0;
+    Session->child = NULL;
+
+    // Set input values
+    Session->ID = ID;
+    Session->parent = Parent;
+    Session->depth = Depth;
+
+    return Session;
+}
+
+_DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, const char *Name)
+{
+    // Allocate memory
+    _DBG_FunctionData *FunctionData = (_DBG_FunctionData *)malloc(sizeof(_DBG_FunctionData));
+
+    if (FunctionData == NULL)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATEFUNCTIONDATA_MEMORY, strerror(errno), _DBG_ERRORMES_MEMORY);
+        return NULL;
+    }
+
+    // Set default values
+    FunctionData->time = 0;
+    FunctionData->subTime = 0;
+    FunctionData->count = 0;
+
+    FunctionData->ID = ID;
+    FunctionData->name = Name;
+
+    return FunctionData;
+}
+
+void _DBG_DestroySession(_DBG_Session *Session)
+{
+    if (Session == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_DESTROYSESSION_NULL, _DBG_SetError);
+
+
+
+        return;
+    }
 }
 
 uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
