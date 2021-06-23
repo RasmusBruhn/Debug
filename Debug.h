@@ -5,9 +5,7 @@
 #define DEBUG_ACTIVE_H_INCLUDED
 
 #ifndef DEBUG_INACTIVE_H_INCLUDED
-
 #define DEBUG_INACTIVE_H_INCLUDED
-
 #else
 
 #ifdef DBG_GetError
@@ -30,18 +28,11 @@
 #include <errno.h>
 #include <time.h>
 
+void DBG_ExitFunc(uint32_t ErrorID);
+
 #ifdef DBG_EXITFUNC
 #define ERR_EXITFUNC DBG_EXITFUNC
 #else
-void DBG_ExitFunc(uint32_t ErrorID) 
-{
-    extern FILE *_DBG_ErrorLog;
-    
-    if (_DBG_ErrorLog != NULL)
-        fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
-    
-    exit(ErrorID);
-}
 #define ERR_EXITFUNC &DBG_ExitFunc
 #endif
 
@@ -50,8 +41,8 @@ void DBG_ExitFunc(uint32_t ErrorID)
 #define ERR_MAXARCHIVED 100
 #include <Error.h>
 
-// Structs
-typedef struct __DBG_Session _DBG_Session;
+    // Structs
+    typedef struct __DBG_Session _DBG_Session;
 typedef struct __DBG_FunctionData _DBG_FunctionData;
 
 // Data for a session, a session starts when a function is executed and ends when the function is done
@@ -83,6 +74,7 @@ enum _DBG_ErrorID
 {
     DBG_ERRORID_NOERROR = 0x00000000,
     DBG_ERRORID_INIT_MEMORY = 0x01010300,
+    DBG_ERRORID_INIT_INIT = 0x01010101,
     DBG_ERRORID_QUIT_INIT = 0x01020100,
     DBG_ERRORID_QUIT_NULL = 0x01020101
 };
@@ -90,6 +82,7 @@ enum _DBG_ErrorID
 #define _DBG_ERRORMES_MEMORY "Unable to allocate memory"
 #define _DBG_ERRORMES_NOINIT "Debugging has not been initialised"
 #define _DBG_ERRORMES_FOUNDNULL "Found a stray NULL pointer in %s"
+#define _DBG_ERRORMES_ALREADYINIT "Debugging has already been initialised"
 
 // Flags
 enum _DBG_Flags
@@ -126,6 +119,16 @@ uint32_t DBG_StartSession(char *Name);
 uint32_t DBG_EndSession(void);
 
 // Functions
+void DBG_ExitFunc(uint32_t ErrorID)
+{
+    extern FILE *_DBG_ErrorLog;
+
+    if (_DBG_ErrorLog != NULL)
+        fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
+
+    exit(ErrorID);
+}
+
 uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
 {
     extern _DBG_FunctionData **_DBG_Functions;
@@ -135,8 +138,15 @@ uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
 
     // Make sure it has not been initialised already
     if (_DBG_Functions != NULL)
-        return;
+    {
+        _DBG_SetError(DBG_ERRORID_INIT_INIT, _DBG_ERRORMES_ALREADYINIT);
 
+        if (_DBG_ErrorLog != NULL)
+            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
+
+        return DBG_ERRORID_NOERROR;
+    }
+        
     // Set error log file
     _DBG_ErrorLog = ErrorLog;
 
@@ -210,7 +220,7 @@ void BDG_Quit(void)
 
 #endif
 #else
-#ifdef DEBUG_INACTIVE_H_INCLUDED
+#ifndef DEBUG_INACTIVE_H_INCLUDED
 #define DEBUG_INACTIVE_H_INCLUDED
 
 // Error function should always return NULL
