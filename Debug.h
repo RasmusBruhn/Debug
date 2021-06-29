@@ -28,7 +28,7 @@
 #include <errno.h>
 #include <time.h>
 
-void DBG_ExitFunc(uint32_t ErrorID);
+void DBG_ExitFunc(uint64_t ErrorID);
 
 #ifdef DBG_EXITFUNC
 #define ERR_EXITFUNC DBG_EXITFUNC
@@ -74,8 +74,8 @@ enum DBG_ErrorID
 {
     DBG_ERRORID_NOERROR = 0x00000000,
     DBG_ERRORID_INIT_MEMORY = 0x100010300,
-    DBG_ERRORID_INIT_INIT = 0x100010101,
-    DBG_ERRORID_QUIT_INIT = 0x100020100,
+    DBG_ERRORID_INIT_INIT = 0x100010201,
+    DBG_ERRORID_QUIT_INIT = 0x100020200,
     DBG_ERRORID_QUIT_NULL = 0x100020101,
     DBG_ERRORID_CREATESESSION_MEMORY = 0x100030200,
     DBG_ERRORID_CREATEFUNCTIONDATA_MEMORY = 0x100040200,
@@ -99,7 +99,7 @@ enum DBG_Flags
 
 // struct print max length
 #define DBG_PRINTSTRUCT_MAXLENGTH 1000
-
+#define DBG_PRINTSTRUCT_LISTMAXLENGTH 5
 
 // global variables
 // The outer most session, NULL if no session has been started
@@ -125,13 +125,13 @@ char _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH] = "No struct printed yet"
 // ID: The ID of the session, what function it corresponds to in the function list
 // Parent: What session was this created inside, NULL if no session was above this
 // Depth: How many sessions are above this, 0 if none is above it
-_DBG_Session *_DBG_CreateSession(uint32_t ID, const _DBG_Session *Parent, uint32_t Depth);
+_DBG_Session *_DBG_CreateSession(uint32_t ID, _DBG_Session *Parent, uint32_t Depth);
 
 // Allocates memory for and initialises a FunctionData struct
 // Returns a pointer to the , NULL on error
 // ID: The ID of the function, where is it located in the function list
 // Name: What is the name of the function
-_DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, const char *Name);
+_DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, char *Name);
 
 // Frees a Session struct and all memory allocated for it
 // Session: The struct to free
@@ -155,17 +155,17 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData);
 // Returns 0 on success and an error code on failure
 // ErrorLog: A text file pointer to where it can write the error messages, NULL if it should not write any messages
 // Flags: Contains all the information for what data to save, options are from DBG_Flags
-uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags);
+uint64_t DBG_Init(FILE *ErrorLog, uint64_t Flags);
 
 // Closes down everything and frees allocated memory
-void BDG_Quit(void);
+void DBG_Quit(void);
 
-uint32_t DBG_StartSession(char *Name);
+uint64_t DBG_StartSession(char *Name);
 
-uint32_t DBG_EndSession(void);
+uint64_t DBG_EndSession(void);
 
 // Functions
-void DBG_ExitFunc(uint32_t ErrorID)
+void DBG_ExitFunc(uint64_t ErrorID)
 {
     extern FILE *_DBG_ErrorLog;
 
@@ -174,10 +174,10 @@ void DBG_ExitFunc(uint32_t ErrorID)
         fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
 
     // Exit
-    exit(ErrorID);
+    exit((uint32_t)ErrorID);
 }
 
-_DBG_Session *_DBG_CreateSession(uint32_t ID, const _DBG_Session *Parent, uint32_t Depth)
+_DBG_Session *_DBG_CreateSession(uint32_t ID, _DBG_Session *Parent, uint32_t Depth)
 {
     // Allocate memory
     _DBG_Session *Session = (_DBG_Session *)malloc(sizeof(_DBG_Session));
@@ -203,7 +203,7 @@ _DBG_Session *_DBG_CreateSession(uint32_t ID, const _DBG_Session *Parent, uint32
     return Session;
 }
 
-_DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, const char *Name)
+_DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, char *Name)
 {
     // Allocate memory
     _DBG_FunctionData *FunctionData = (_DBG_FunctionData *)malloc(sizeof(_DBG_FunctionData));
@@ -249,22 +249,8 @@ char *_DBG_PrintSession(const _DBG_Session *Session)
     extern char _DBG_PrintStructString[];
     extern FILE *_DBG_ErrorLog;
 
-    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, \
-                                                                                    startTime = %lu, \
-                                                                                    subTime = %lu, \
-                                                                                    removeTime = %lu, \
-                                                                                    removeSubTime = %lu, \
-                                                                                    child = %lX, \
-                                                                                    parent = %lX, \
-                                                                                    depth = %u}",
-                                                                                    Session->ID,
-                                                                                    Session->startTime,
-                                                                                    Session->subTime,
-                                                                                    Session->removeTime,
-                                                                                    Session->removeSubTime,
-                                                                                    (uint64_t)Session->child,
-                                                                                    (uint64_t)Session->parent,
-                                                                                    Session->depth);
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, startTime = %lu, subTime = %lu, removeTime = %lu, removeSubTime = %lu, child = %lX, parent = %lX, depth = %u}",
+                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, Session->removeSubTime, (uint64_t)Session->child, (uint64_t)Session->parent, Session->depth);
 
     // Show if it was too long
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
@@ -297,18 +283,32 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
 
     for (uint64_t *TimeList = FunctionData->time, *EndTimeList = FunctionData->time + FunctionData->count; TimeList < EndTimeList; ++TimeList)
     {
+        // Check if there are too many elements
+        if (TimeList >= FunctionData->time + DBG_PRINTSTRUCT_LISTMAXLENGTH)
+        {
+            *String = '.';
+            *(String + 1) = '.';
+            *(String + 2) = '.';
+
+            String += 5;
+
+            break;
+        }
+
         // Print the element
         Length = snprintf(String, MaxLength, "%lu, ", *TimeList);
         String += Length;
         MaxLength -= Length;
 
-        if (MaxLength <= 0)
+        if (MaxLength <= 4)
         {
-            TimeString[DBG_PRINTSTRUCT_MAXLENGTH - 2] = '.';
             TimeString[DBG_PRINTSTRUCT_MAXLENGTH - 3] = '.';
             TimeString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
+            TimeString[DBG_PRINTSTRUCT_MAXLENGTH - 5] = '.';
 
-            _DBG_SetError(DBG_ERRORID_PRINTFUNCTIONDATA_LONG1, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 1);
+            String = TimeString + DBG_PRINTSTRUCT_MAXLENGTH;
+
+            _DBG_SetError(DBG_ERRORID_PRINTFUNCTIONDATA_LONG1, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 5);
 
             if (_DBG_ErrorLog != NULL)
                 fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
@@ -318,8 +318,17 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
     }
 
     // Add ending bracket
-    if (MaxLength > 0)
+    if (FunctionData->count == 0)
+    {
+        *String = ']';
+        *(String + 1) = '\0';
+    }
+
+    else
+    {
         *(String - 2) = ']';
+        *(String - 1) = '\0';
+    }
 
     Length = snprintf(SubTimeString, DBG_PRINTSTRUCT_MAXLENGTH, "[");
     String = SubTimeString + Length;
@@ -327,18 +336,32 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
 
     for (uint64_t *TimeList = FunctionData->subTime, *EndTimeList = FunctionData->subTime + FunctionData->count; TimeList < EndTimeList; ++TimeList)
     {
+        // Check if there are too many elements
+        if (TimeList >= FunctionData->subTime + DBG_PRINTSTRUCT_LISTMAXLENGTH)
+        {
+            *String = '.';
+            *(String + 1) = '.';
+            *(String + 2) = '.';
+
+            String += 5;
+
+            break;
+        }
+
         // Print the element
         Length = snprintf(String, MaxLength, "%lu, ", *TimeList);
         String += Length;
         MaxLength -= Length;
 
-        if (MaxLength <= 0)
+        if (MaxLength <= 4)
         {
-            SubTimeString[DBG_PRINTSTRUCT_MAXLENGTH - 2] = '.';
-            SubTimeString[DBG_PRINTSTRUCT_MAXLENGTH - 3] = '.';
-            SubTimeString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
+            TimeString[DBG_PRINTSTRUCT_MAXLENGTH - 3] = '.';
+            TimeString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
+            TimeString[DBG_PRINTSTRUCT_MAXLENGTH - 5] = '.';
 
-            _DBG_SetError(DBG_ERRORID_PRINTFUNCTIONDATA_LONG2, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 1);
+            String = TimeString + DBG_PRINTSTRUCT_MAXLENGTH;
+
+            _DBG_SetError(DBG_ERRORID_PRINTFUNCTIONDATA_LONG2, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 5);
 
             if (_DBG_ErrorLog != NULL)
                 fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
@@ -348,20 +371,21 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
     }
 
     // Add ending bracket
-    if (MaxLength > 0)
+    if (FunctionData->count == 0)
+    {
+        *String = ']';
+        *(String + 1) = '\0';
+    }
+
+    else if (MaxLength > 0)
+    {
         *(String - 2) = ']';
+        *(String - 1) = '\0';
+    }
 
     // Print the struct
-    Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, \
-                                                                           name = \"%s\", \
-                                                                           count = %u, \
-                                                                           time = %s, \
-                                                                           subTime = %s}",
-                                                                           FunctionData->ID,
-                                                                           FunctionData->name,
-                                                                           FunctionData->count,
-                                                                           TimeString,
-                                                                           SubTimeString);
+    Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, name = \"%s\", count = %u, time = %s, subTime = %s}",
+                                                                           FunctionData->ID, FunctionData->name, FunctionData->count, TimeString, SubTimeString);
 
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
     {
@@ -378,7 +402,7 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
     return _DBG_PrintStructString;
 }
 
-uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
+uint64_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
 {
     extern _DBG_FunctionData **_DBG_Functions;
     extern uint32_t _DBG_FunctionCount;
@@ -393,7 +417,7 @@ uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
         if (_DBG_ErrorLog != NULL)
             fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
 
-        return DBG_ERRORID_NOERROR;
+        return DBG_ERRORID_INIT_INIT;
     }
         
     // Set error log file
@@ -424,7 +448,7 @@ uint32_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
     return DBG_ERRORID_NOERROR;
 }
 
-void BDG_Quit(void)
+void DBG_Quit(void)
 {
     extern _DBG_FunctionData **_DBG_Functions;
     extern uint32_t _DBG_FunctionCount;
@@ -443,7 +467,7 @@ void BDG_Quit(void)
     }
 
     // Free all of the functions
-    for (_DBG_FunctionData **DataList = _DBG_Functions, **DataListEnd = _DBG_Functions + _DBG_FunctionCount; DataList < DataListEnd; ++DataList)
+    for (_DBG_FunctionData **DataList = _DBG_Functions + 1, **DataListEnd = _DBG_Functions + _DBG_FunctionCount; DataList < DataListEnd; ++DataList)
     {
         if (*DataList != NULL)
             free(*DataList);
