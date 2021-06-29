@@ -38,11 +38,7 @@ int main(int argc, char **argv)
 
     // Flags
     extern uint64_t _DBG_UsedFlags;
-    printf("Flags: %lX\n", _DBG_UsedFlags);
-
-    // Error log
-    extern FILE *_DBG_ErrorLog;
-    printf("Error log: %lX\n\n", (uint64_t)_DBG_ErrorLog);
+    printf("Flags: %lX\n\n", _DBG_UsedFlags);
 
 
 
@@ -73,10 +69,7 @@ int main(int argc, char **argv)
         printf("- %s\n", _DBG_PrintFunctionData(_DBG_Functions[Var]));
 
     // Flags
-    printf("Flags: %lX\n", _DBG_UsedFlags);
-
-    // Error log
-    printf("Error log: %lX\n\n", (uint64_t)_DBG_ErrorLog);
+    printf("Flags: %lX\n\n", _DBG_UsedFlags);
 
 
 
@@ -85,10 +78,7 @@ int main(int argc, char **argv)
         printf("Error initialising twice: %s\n", DBG_GetError());
 
     // Flags
-    printf("Flags: %lX\n", _DBG_UsedFlags);
-
-    // Error log
-    printf("Error log: %lX\n\n", (uint64_t)_DBG_ErrorLog);
+    printf("Flags: %lX\n\n", _DBG_UsedFlags);
 
 
 
@@ -108,7 +98,7 @@ int main(int argc, char **argv)
 
     DBG_Quit();
 
-    
+
 
     // Print values after quit
     printf("After quitting\n");
@@ -127,11 +117,7 @@ int main(int argc, char **argv)
         printf("- %s\n", _DBG_PrintFunctionData(_DBG_Functions[Var]));
 
     // Flags
-    printf("Flags: %lX\n", _DBG_UsedFlags);
-
-    // Error log
-    printf("Error log: %lX\n\n", (uint64_t)_DBG_ErrorLog);
-
+    printf("Flags: %lX\n\n", _DBG_UsedFlags);
 
 
     printf("Error archive:\n");

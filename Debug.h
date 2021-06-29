@@ -27,6 +27,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <time.h>
+#include <string.h>
 
 void DBG_ExitFunc(uint64_t ErrorID);
 
@@ -73,25 +74,31 @@ struct __DBG_FunctionData
 enum DBG_ErrorID
 {
     DBG_ERRORID_NOERROR = 0x00000000,
-    DBG_ERRORID_INIT_MEMORY = 0x100010300,
+    DBG_ERRORID_INIT_MALLOC = 0x100010300,
     DBG_ERRORID_INIT_INIT = 0x100010201,
     DBG_ERRORID_QUIT_INIT = 0x100020200,
     DBG_ERRORID_QUIT_NULL = 0x100020101,
     DBG_ERRORID_QUIT_SESSION = 0x100020102,
-    DBG_ERRORID_CREATESESSION_MEMORY = 0x100030200,
-    DBG_ERRORID_CREATEFUNCTIONDATA_MEMORY = 0x100040200,
+    DBG_ERRORID_CREATESESSION_MALLOC = 0x100030200,
+    DBG_ERRORID_CREATEFUNCTIONDATA_MALLOC = 0x100040200,
     DBG_ERRORID_PRINTSESSION_LONG = 0x100050100,
     DBG_ERRORID_PRINTFUNCTIONDATA_LONG1 = 0x100060100,
     DBG_ERRORID_PRINTFUNCTIONDATA_LONG2 = 0x100060101,
-    DBG_ERRORID_PRINTFUNCTIONDATA_LONG3 = 0x100060102
+    DBG_ERRORID_PRINTFUNCTIONDATA_LONG3 = 0x100060102,
+    DBG_ERRORID_STARTSESSION_NAME = 0x100070200,
+    DBG_ERRORID_STARTSESSION_CREATEFUNCTION = 0x100070201,
+    DBG_ERRORID_STARTSESSION_REALLOC = 0x100070202
 };
 
-#define _DBG_ERRORMES_MEMORY "Unable to allocate memory"
+#define _DBG_ERRORMES_MALLOC "Unable to allocate memory"
+#define _DBG_ERRORMES_REALLOC "Unable to reallocate memory"
 #define _DBG_ERRORMES_NOINIT "Debugging has not been initialised"
 #define _DBG_ERRORMES_FOUNDNULL "Found a stray NULL pointer in %s"
 #define _DBG_ERRORMES_ALREADYINIT "Debugging has already been initialised"
 #define _DBG_ERRORMES_LONGPRINT "The printed message was too long and was truncated, length was %u with max length of %u"
 #define _DBG_ERRORMES_OPENSESSIONS "There are still open sessions"
+#define _DBG_ERRORMES_ARGNULL "Argument \"%s\" was NULL"
+#define _DBG_ERRORMES_CREATESTRUCT "Unable to create \"%s\" struct"
 
 // Flags
 enum DBG_Flags
@@ -115,9 +122,6 @@ uint32_t _DBG_FunctionCount = 0;
 
 // Flags for what to save
 uint64_t _DBG_UsedFlags = 0;
-
-// File to write errors to
-FILE *_DBG_ErrorLog = NULL;
 
 // String to print structs in
 char _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH] = "No struct printed yet";
@@ -170,12 +174,6 @@ uint64_t DBG_EndSession(void);
 // Functions
 void DBG_ExitFunc(uint64_t ErrorID)
 {
-    extern FILE *_DBG_ErrorLog;
-
-    // Write to error log
-    if (_DBG_ErrorLog != NULL)
-        fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
-
     // Exit
     exit((uint32_t)ErrorID);
 }
@@ -187,7 +185,7 @@ _DBG_Session *_DBG_CreateSession(uint32_t ID, _DBG_Session *Parent, uint32_t Dep
 
     if (Session == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_CREATESESSION_MEMORY, strerror(errno), _DBG_ERRORMES_MEMORY);
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATESESSION_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
         return NULL;
     }
  
@@ -213,7 +211,7 @@ _DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, char *Name)
 
     if (FunctionData == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_CREATEFUNCTIONDATA_MEMORY, strerror(errno), _DBG_ERRORMES_MEMORY);
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATEFUNCTIONDATA_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
         return NULL;
     }
 
@@ -250,7 +248,6 @@ char *_DBG_PrintSession(const _DBG_Session *Session)
 {
     // Print everything to a string
     extern char _DBG_PrintStructString[];
-    extern FILE *_DBG_ErrorLog;
 
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, startTime = %lu, subTime = %lu, removeTime = %lu, removeSubTime = %lu, child = %lX, parent = %lX, depth = %u}",
                                                                                    Session->ID, Session->startTime, Session->subTime, Session->removeTime, Session->removeSubTime, (uint64_t)Session->child, (uint64_t)Session->parent, Session->depth);
@@ -263,9 +260,6 @@ char *_DBG_PrintSession(const _DBG_Session *Session)
         _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
 
         _DBG_SetError(DBG_ERRORID_PRINTSESSION_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
-
-        if (_DBG_ErrorLog != NULL)
-            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
     }
 
     return _DBG_PrintStructString;
@@ -274,7 +268,6 @@ char *_DBG_PrintSession(const _DBG_Session *Session)
 char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
 {
     extern char _DBG_PrintStructString[];
-    extern FILE *_DBG_ErrorLog;
 
     // Convert the list of times to strings
     char TimeString[DBG_PRINTSTRUCT_MAXLENGTH];
@@ -312,9 +305,6 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
             String = TimeString + DBG_PRINTSTRUCT_MAXLENGTH;
 
             _DBG_SetError(DBG_ERRORID_PRINTFUNCTIONDATA_LONG1, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 5);
-
-            if (_DBG_ErrorLog != NULL)
-                fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
 
             break;
         }
@@ -366,9 +356,6 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
 
             _DBG_SetError(DBG_ERRORID_PRINTFUNCTIONDATA_LONG2, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 5);
 
-            if (_DBG_ErrorLog != NULL)
-                fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
-
             break;
         }
     }
@@ -397,9 +384,6 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
         _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
 
         _DBG_SetError(DBG_ERRORID_PRINTFUNCTIONDATA_LONG3, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
-
-        if (_DBG_ErrorLog != NULL)
-            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
     }
 
     return _DBG_PrintStructString;
@@ -410,34 +394,26 @@ uint64_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
     extern _DBG_FunctionData **_DBG_Functions;
     extern uint32_t _DBG_FunctionCount;
     extern uint64_t _DBG_UsedFlags;
-    extern FILE *_DBG_ErrorLog;
 
     // Make sure it has not been initialised already
     if (_DBG_Functions != NULL)
     {
         _DBG_SetError(DBG_ERRORID_INIT_INIT, _DBG_ERRORMES_ALREADYINIT);
 
-        if (_DBG_ErrorLog != NULL)
-            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
-
         return DBG_ERRORID_INIT_INIT;
     }
         
     // Set error log file
-    _DBG_ErrorLog = ErrorLog;
+    _DBG_SetLogFile(ErrorLog);
 
     // Allocate memory for the functions
     _DBG_Functions = (_DBG_FunctionData **)malloc(sizeof(_DBG_FunctionData));
 
     if (_DBG_Functions == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_INIT_MEMORY, strerror(errno), _DBG_ERRORMES_MEMORY);
+        _DBG_AddErrorForeign(DBG_ERRORID_INIT_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
 
-        if (_DBG_ErrorLog != NULL)
-            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
-
-        _DBG_ErrorLog = NULL;
-        return DBG_ERRORID_INIT_MEMORY;
+        return DBG_ERRORID_INIT_MALLOC;
     }
 
     _DBG_FunctionCount = 1;
@@ -456,15 +432,11 @@ void DBG_Quit(void)
     extern _DBG_FunctionData **_DBG_Functions;
     extern uint32_t _DBG_FunctionCount;
     extern uint64_t _DBG_UsedFlags;
-    extern FILE *_DBG_ErrorLog;
 
     // Make sure it has been initialised
     if (_DBG_Functions == NULL)
     {
         _DBG_SetError(DBG_ERRORID_QUIT_INIT, _DBG_ERRORMES_NOINIT);
-
-        if (_DBG_ErrorLog != NULL)
-            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
 
         return;
     }
@@ -476,12 +448,7 @@ void DBG_Quit(void)
             free(*DataList);
         
         else
-        {
             _DBG_SetError(DBG_ERRORID_QUIT_NULL, _DBG_ERRORMES_FOUNDNULL, "_DBG_Functions");
-
-            if (_DBG_ErrorLog != NULL)
-                fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
-        }
     }
 
     // Close all open sessions
@@ -494,9 +461,6 @@ void DBG_Quit(void)
     if (_DBG_FirstSession != NULL)
     {
         _DBG_SetError(DBG_ERRORID_QUIT_SESSION, _DBG_ERRORMES_OPENSESSIONS);
-
-        if (_DBG_ErrorLog != NULL)
-            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
 
         _DBG_Session *FreeSession = NULL;
         _DBG_Session *NextSession = _DBG_FirstSession;
@@ -518,16 +482,73 @@ void DBG_Quit(void)
     _DBG_FunctionCount = 0;
     _DBG_Functions = NULL;
     _DBG_UsedFlags = 0;
-    _DBG_ErrorLog = NULL;
 }
 
 uint64_t DBG_StartSession(char *Name)
 {
-    // Find the function ID
+    extern uint32_t _DBG_FunctionCount;
+    extern _DBG_FunctionData **_DBG_Functions;
+
+    // Make sure name is not NULL
+    if (Name == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_STARTSESSION_NAME, _DBG_ERRORMES_ARGNULL, "Name");
+
+        return DBG_ERRORID_STARTSESSION_NAME;
+    }
+
+    // Find the function
+    _DBG_FunctionData *FoundFunction = NULL;
+
+    for (_DBG_FunctionData **FunctionList = _DBG_Functions, **EndFunctionList = _DBG_Functions + _DBG_FunctionCount; FunctionList < EndFunctionList; ++FunctionList)
+        if (strcmp((*FunctionList)->name, Name) == 0)
+        {
+            FoundFunction = *FunctionList;
+            break;
+        }
 
     // Create new function if it didn't exist
+    if (FoundFunction == NULL)
+    {
+        // Get memory
+        FoundFunction = _DBG_CreateFunctionData(_DBG_FunctionCount, Name);
 
-    // Start new session
+        if (FoundFunction == NULL)
+        {
+            _DBG_AddError(DBG_ERRORID_STARTSESSION_CREATEFUNCTION, _DBG_ERRORMES_CREATESTRUCT, "FunctionData");
+
+            return DBG_ERRORID_STARTSESSION_CREATEFUNCTION;
+        }
+
+        _DBG_FunctionData **NewFunctionList = (_DBG_FunctionData **)realloc(_DBG_Functions, sizeof(_DBG_FunctionData *) * (_DBG_FunctionCount + 1));
+
+        if (NewFunctionList == NULL)
+        {
+            _DBG_AddErrorForeign(DBG_ERRORID_STARTSESSION_REALLOC, strerror(errno), _DBG_ERRORMES_REALLOC);
+
+            return DBG_ERRORID_STARTSESSION_REALLOC;
+        }
+
+        _DBG_Functions = NewFunctionList;
+        _DBG_Functions[_DBG_FunctionCount++] = FoundFunction;
+    }
+
+    // Create new session struct
+
+    // Set starting time
+
+    // Update current and first session
+}
+
+uint64_t DBG_EndSession(void)
+{
+    // Calculate time
+
+    // Add time to function time list
+
+    // Add time to subtime of parent
+
+    // Update current and first session
 }
 
 #endif
