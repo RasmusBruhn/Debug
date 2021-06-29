@@ -77,6 +77,7 @@ enum DBG_ErrorID
     DBG_ERRORID_INIT_INIT = 0x100010201,
     DBG_ERRORID_QUIT_INIT = 0x100020200,
     DBG_ERRORID_QUIT_NULL = 0x100020101,
+    DBG_ERRORID_QUIT_SESSION = 0x100020102,
     DBG_ERRORID_CREATESESSION_MEMORY = 0x100030200,
     DBG_ERRORID_CREATEFUNCTIONDATA_MEMORY = 0x100040200,
     DBG_ERRORID_PRINTSESSION_LONG = 0x100050100,
@@ -90,6 +91,7 @@ enum DBG_ErrorID
 #define _DBG_ERRORMES_FOUNDNULL "Found a stray NULL pointer in %s"
 #define _DBG_ERRORMES_ALREADYINIT "Debugging has already been initialised"
 #define _DBG_ERRORMES_LONGPRINT "The printed message was too long and was truncated, length was %u with max length of %u"
+#define _DBG_ERRORMES_OPENSESSIONS "There are still open sessions"
 
 // Flags
 enum DBG_Flags
@@ -104,6 +106,7 @@ enum DBG_Flags
 // global variables
 // The outer most session, NULL if no session has been started
 _DBG_Session *_DBG_FirstSession = NULL;
+_DBG_Session *_DBG_CurrentSession = NULL;
 
 // List of all the functions
 _DBG_FunctionData _DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .time = NULL, .subTime = NULL};
@@ -481,6 +484,33 @@ void DBG_Quit(void)
         }
     }
 
+    // Close all open sessions
+    extern _DBG_Session *_DBG_CurrentSession;
+    extern _DBG_Session *_DBG_FirstSession;
+
+    _DBG_CurrentSession = NULL;
+
+    // Make sure every session is closed
+    if (_DBG_FirstSession != NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_QUIT_SESSION, _DBG_ERRORMES_OPENSESSIONS);
+
+        if (_DBG_ErrorLog != NULL)
+            fprintf(_DBG_ErrorLog, "%s\n", DBG_GetError());
+
+        _DBG_Session *FreeSession = NULL;
+        _DBG_Session *NextSession = _DBG_FirstSession;
+
+        while (NextSession != NULL)
+        {
+            FreeSession = NextSession;
+            NextSession = NextSession->child;
+            _DBG_DestroySession(FreeSession);
+        }
+    }
+
+    _DBG_FirstSession = NULL;
+
     // Free the functions list
     free(_DBG_Functions);
 
@@ -489,6 +519,15 @@ void DBG_Quit(void)
     _DBG_Functions = NULL;
     _DBG_UsedFlags = 0;
     _DBG_ErrorLog = NULL;
+}
+
+uint64_t DBG_StartSession(char *Name)
+{
+    // Find the function ID
+
+    // Create new function if it didn't exist
+
+    // Start new session
 }
 
 #endif
@@ -502,6 +541,10 @@ void DBG_Quit(void)
 // Init and quit should alwas return no error
 #define DBG_Init(ErrorLog, Flags) 0
 #define DBG_Quit()
+
+// Start and end session always return no error
+#define DBG_StartSession(Name) 0
+#define DBG_EndSession() 0
 
 #endif
 #endif

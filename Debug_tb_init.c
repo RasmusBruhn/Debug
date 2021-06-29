@@ -18,7 +18,12 @@ int main(int argc, char **argv)
     printf("Before initialisation\n");
     
     // First session
+    extern _DBG_Session *_DBG_FirstSession;
     printf("First session: %lX\n", (uint64_t)_DBG_FirstSession);
+
+    // Current session
+    extern _DBG_Session *_DBG_CurrentSession;
+    printf("Current session: %lX\n", (uint64_t)_DBG_CurrentSession);
 
     // Main function
     extern _DBG_FunctionData _DBG_FunctionMain;
@@ -57,6 +62,9 @@ int main(int argc, char **argv)
     // First session
     printf("First session: %lX\n", (uint64_t)_DBG_FirstSession);
 
+    // First session
+    printf("Current session: %lX\n", (uint64_t)_DBG_CurrentSession);
+
     // Function list
     printf("Function count: %u\n", _DBG_FunctionCount);
     printf("Function list:\n");
@@ -84,6 +92,12 @@ int main(int argc, char **argv)
 
 
 
+    // Set the session
+    _DBG_CurrentSession = _DBG_CreateSession(0, NULL, 0);
+    _DBG_FirstSession = _DBG_CurrentSession;
+
+
+
     // Make sure error is given in quit when function data is NULL
     extern _DBG_FunctionData **_DBG_Functions;
     extern uint32_t _DBG_FunctionCount;
@@ -94,13 +108,16 @@ int main(int argc, char **argv)
 
     DBG_Quit();
 
-
+    
 
     // Print values after quit
     printf("After quitting\n");
 
     // First session
     printf("First session: %lX\n", (uint64_t)_DBG_FirstSession);
+
+    // First session
+    printf("Current session: %lX\n", (uint64_t)_DBG_CurrentSession);
 
     // Function list
     printf("Function count: %u\n", _DBG_FunctionCount);
