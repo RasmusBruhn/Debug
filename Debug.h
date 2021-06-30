@@ -53,7 +53,6 @@ struct __DBG_Session
     uint64_t startTime;     // What time it started the session
     uint64_t subTime;       // How much time has been used in subfunctions
     uint64_t removeTime;    // How much time has been used by DBG functions inside this session
-    uint64_t removeSubTime; // How much time has been used by DBG functions inside children sessions of this session
     _DBG_Session *child;    // What session is running inside this session, NULL if it doesn't have another session running
     _DBG_Session *parent;   // What session is this session running in, NULL if it doesn't run in another session
     uint32_t depth;         // How many sessions are above this one, 0 when there are none above it
@@ -65,8 +64,8 @@ struct __DBG_FunctionData
     uint32_t ID;            // The id of the session, this is where in the list it is
     char *name;             // The name of the function
     uint32_t count;         // The number of times this function has been executed
-    uint64_t *time;         // List of time spent in each of the sessions without time in sub sessions
-    uint64_t *subTime;      // List of time spent in each of the sessions with time in sub sessions
+    uint64_t *time;         // List of time spent in each of the sessions with time in sub sessions
+    uint64_t *ownTime;      // List of time spent in each of the sessions without time in sub sessions
 };
 
 // Contants
@@ -85,9 +84,12 @@ enum DBG_ErrorID
     DBG_ERRORID_PRINTFUNCTIONDATA_LONG1 = 0x100060100,
     DBG_ERRORID_PRINTFUNCTIONDATA_LONG2 = 0x100060101,
     DBG_ERRORID_PRINTFUNCTIONDATA_LONG3 = 0x100060102,
-    DBG_ERRORID_STARTSESSION_NAME = 0x100070200,
-    DBG_ERRORID_STARTSESSION_CREATEFUNCTION = 0x100070201,
-    DBG_ERRORID_STARTSESSION_REALLOC = 0x100070202
+    DBG_ERRORID_STARTSESSION_NAME = 0x100070300,
+    DBG_ERRORID_STARTSESSION_CREATEFUNCTION = 0x100070301,
+    DBG_ERRORID_STARTSESSION_REALLOC = 0x100070302,
+    DBG_ERRORID_STARTSESSION_CREATESESSION = 0x100070303,
+    DBG_ERRORID_ENDSESSION_NONEOPEN = 0x100080300,
+    DBG_ERRORID_ENDSESSION_REALLOC = 0x100080301
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory"
@@ -99,6 +101,7 @@ enum DBG_ErrorID
 #define _DBG_ERRORMES_OPENSESSIONS "There are still open sessions"
 #define _DBG_ERRORMES_ARGNULL "Argument \"%s\" was NULL"
 #define _DBG_ERRORMES_CREATESTRUCT "Unable to create \"%s\" struct"
+#define _DBG_ERRORMES_NOOPENSESSION "Attempting to close session with no open sessions"
 
 // Flags
 enum DBG_Flags
@@ -116,7 +119,7 @@ _DBG_Session *_DBG_FirstSession = NULL;
 _DBG_Session *_DBG_CurrentSession = NULL;
 
 // List of all the functions
-_DBG_FunctionData _DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .time = NULL, .subTime = NULL};
+_DBG_FunctionData _DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .time = NULL, .ownTime = NULL};
 _DBG_FunctionData **_DBG_Functions = NULL;
 uint32_t _DBG_FunctionCount = 0;
 
@@ -193,7 +196,6 @@ _DBG_Session *_DBG_CreateSession(uint32_t ID, _DBG_Session *Parent, uint32_t Dep
     Session->startTime = 0;
     Session->subTime = 0;
     Session->removeTime = 0;
-    Session->removeSubTime = 0;
     Session->child = NULL;
 
     // Set input values
@@ -216,8 +218,8 @@ _DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, char *Name)
     }
 
     // Set default values
-    FunctionData->time = 0;
-    FunctionData->subTime = 0;
+    FunctionData->time = NULL;
+    FunctionData->ownTime = NULL;
     FunctionData->count = 0;
 
     FunctionData->ID = ID;
@@ -237,8 +239,8 @@ void _DBG_DestroyFunctionData(_DBG_FunctionData *FunctionData)
     if (FunctionData->time != NULL)
         free(FunctionData->time);
 
-    if (FunctionData->subTime != NULL)
-        free(FunctionData->subTime);
+    if (FunctionData->ownTime != NULL)
+        free(FunctionData->ownTime);
 
     // Free the struct
     free(FunctionData);
@@ -249,8 +251,8 @@ char *_DBG_PrintSession(const _DBG_Session *Session)
     // Print everything to a string
     extern char _DBG_PrintStructString[];
 
-    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, startTime = %lu, subTime = %lu, removeTime = %lu, removeSubTime = %lu, child = %lX, parent = %lX, depth = %u}",
-                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, Session->removeSubTime, (uint64_t)Session->child, (uint64_t)Session->parent, Session->depth);
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, startTime = %lu, subTime = %lu, removeTime = %lu, child = %lX, parent = %lX, depth = %u}",
+                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, (uint64_t)Session->child, (uint64_t)Session->parent, Session->depth);
 
     // Show if it was too long
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
@@ -271,7 +273,7 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
 
     // Convert the list of times to strings
     char TimeString[DBG_PRINTSTRUCT_MAXLENGTH];
-    char SubTimeString[DBG_PRINTSTRUCT_MAXLENGTH];
+    char OwnTimeString[DBG_PRINTSTRUCT_MAXLENGTH];
 
     int32_t Length = snprintf(TimeString, DBG_PRINTSTRUCT_MAXLENGTH, "[");
     char *String = TimeString + Length;
@@ -323,14 +325,14 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
         *(String - 1) = '\0';
     }
 
-    Length = snprintf(SubTimeString, DBG_PRINTSTRUCT_MAXLENGTH, "[");
-    String = SubTimeString + Length;
+    Length = snprintf(OwnTimeString, DBG_PRINTSTRUCT_MAXLENGTH, "[");
+    String = OwnTimeString + Length;
     MaxLength = DBG_PRINTSTRUCT_MAXLENGTH - Length;
 
-    for (uint64_t *TimeList = FunctionData->subTime, *EndTimeList = FunctionData->subTime + FunctionData->count; TimeList < EndTimeList; ++TimeList)
+    for (uint64_t *TimeList = FunctionData->ownTime, *EndTimeList = FunctionData->ownTime + FunctionData->count; TimeList < EndTimeList; ++TimeList)
     {
         // Check if there are too many elements
-        if (TimeList >= FunctionData->subTime + DBG_PRINTSTRUCT_LISTMAXLENGTH)
+        if (TimeList >= FunctionData->ownTime + DBG_PRINTSTRUCT_LISTMAXLENGTH)
         {
             *String = '.';
             *(String + 1) = '.';
@@ -374,8 +376,8 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
     }
 
     // Print the struct
-    Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, name = \"%s\", count = %u, time = %s, subTime = %s}",
-                                                                           FunctionData->ID, FunctionData->name, FunctionData->count, TimeString, SubTimeString);
+    Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, name = \"%s\", count = %u, time = %s, ownTime = %s}",
+                                                                           FunctionData->ID, FunctionData->name, FunctionData->count, TimeString, OwnTimeString);
 
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
     {
@@ -486,6 +488,8 @@ void DBG_Quit(void)
 
 uint64_t DBG_StartSession(char *Name)
 {
+    uint64_t StartTime = clock();
+
     extern uint32_t _DBG_FunctionCount;
     extern _DBG_FunctionData **_DBG_Functions;
 
@@ -529,26 +533,96 @@ uint64_t DBG_StartSession(char *Name)
             return DBG_ERRORID_STARTSESSION_REALLOC;
         }
 
+        // Insert the new function
         _DBG_Functions = NewFunctionList;
         _DBG_Functions[_DBG_FunctionCount++] = FoundFunction;
     }
 
     // Create new session struct
+    extern _DBG_Session *_DBG_CurrentSession;
+    extern _DBG_Session *_DBG_FirstSession;
+    uint32_t Depth = ((_DBG_CurrentSession == NULL) ? (0) : (_DBG_CurrentSession->depth + 1));
+
+    _DBG_Session *NewSession = _DBG_CreateSession(FoundFunction->ID, _DBG_CurrentSession, Depth);
+
+    if (NewSession == NULL)
+    {
+        _DBG_AddError(DBG_ERRORID_STARTSESSION_CREATESESSION, _DBG_ERRORMES_CREATESTRUCT, "Session");
+
+        return DBG_ERRORID_STARTSESSION_CREATESESSION;
+    }
 
     // Set starting time
+    NewSession->startTime = StartTime;
 
     // Update current and first session
+    if (_DBG_CurrentSession != NULL)
+        _DBG_CurrentSession->child = NewSession;
+
+    _DBG_CurrentSession = NewSession;
+
+    if (_DBG_FirstSession == NULL)
+        _DBG_FirstSession = NewSession;
+
+    uint64_t EndTime = clock();
+
+    NewSession->removeTime = EndTime - StartTime;
 }
 
 uint64_t DBG_EndSession(void)
 {
+    uint64_t StartTime = clock();
+
+    extern _DBG_Session *_DBG_CurrentSession;
+    extern _DBG_Session *_DBG_FirstSession;
+
+    // Make sure something is open
+    if (_DBG_CurrentSession == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_ENDSESSION_NONEOPEN, _DBG_ERRORMES_NOOPENSESSION);
+        return DBG_ERRORID_ENDSESSION_NONEOPEN;
+    }
+
     // Calculate time
+    uint64_t TotalTime = StartTime - _DBG_CurrentSession->startTime - _DBG_CurrentSession->removeTime;
+    uint64_t OwnTime = TotalTime - _DBG_CurrentSession->subTime;
 
     // Add time to function time list
+    extern _DBG_FunctionData **_DBG_Functions;
 
-    // Add time to subtime of parent
+    uint64_t *NewTime = (uint64_t *)realloc(_DBG_Functions[_DBG_CurrentSession->ID]->time, sizeof(uint64_t) * (_DBG_Functions[_DBG_CurrentSession->ID]->count + 1));
+    uint64_t *NewOwnTime = (uint64_t *)realloc(_DBG_Functions[_DBG_CurrentSession->ID]->ownTime, sizeof(uint64_t) * (_DBG_Functions[_DBG_CurrentSession->ID]->count + 1));
 
-    // Update current and first session
+    if (NewTime == NULL || NewOwnTime == NULL)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_ENDSESSION_REALLOC, strerror(errno), _DBG_ERRORMES_REALLOC);
+        return DBG_ERRORID_ENDSESSION_REALLOC;
+    }
+
+    NewTime[_DBG_Functions[_DBG_CurrentSession->ID]->count] = TotalTime;
+    NewOwnTime[_DBG_Functions[_DBG_CurrentSession->ID]->count++] = OwnTime;
+
+    _DBG_Functions[_DBG_CurrentSession->ID]->time = NewTime;
+    _DBG_Functions[_DBG_CurrentSession->ID]->ownTime = NewOwnTime;
+
+    // Add time to subtime and removeSubTime and removeTime of parent
+    if (_DBG_CurrentSession->parent != NULL)
+    {
+        _DBG_CurrentSession->parent->removeTime += _DBG_CurrentSession->removeTime;
+        _DBG_CurrentSession->parent->subTime += TotalTime;
+    }
+
+    // Uppdate first and current session
+    else
+        _DBG_FirstSession = NULL;
+
+    _DBG_CurrentSession = _DBG_CurrentSession->parent;
+
+    // Add removeTime to parent
+    uint64_t EndTime = clock();
+
+    if (_DBG_CurrentSession != NULL)
+        _DBG_CurrentSession->removeTime += EndTime - StartTime;
 }
 
 #endif
