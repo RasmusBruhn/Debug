@@ -1,3 +1,0 @@
-Tue Jun 29 22:39:57 2021: 100010201: Debugging has already been initialised
-Tue Jun 29 22:39:57 2021: 100020101: Found a stray NULL pointer in _DBG_Functions
-Tue Jun 29 22:39:57 2021: 100020102: There are still open sessions

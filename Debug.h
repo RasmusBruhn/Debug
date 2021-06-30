@@ -484,6 +484,9 @@ void DBG_Quit(void)
     _DBG_FunctionCount = 0;
     _DBG_Functions = NULL;
     _DBG_UsedFlags = 0;
+
+    // Reset the log file
+    _DBG_SetLogFile(NULL);
 }
 
 uint64_t DBG_StartSession(char *Name)
@@ -567,6 +570,8 @@ uint64_t DBG_StartSession(char *Name)
     uint64_t EndTime = clock();
 
     NewSession->removeTime = EndTime - StartTime;
+
+    return DBG_ERRORID_NOERROR;
 }
 
 uint64_t DBG_EndSession(void)
@@ -610,19 +615,26 @@ uint64_t DBG_EndSession(void)
     {
         _DBG_CurrentSession->parent->removeTime += _DBG_CurrentSession->removeTime;
         _DBG_CurrentSession->parent->subTime += TotalTime;
+        _DBG_CurrentSession->parent->child = NULL;
     }
 
     // Uppdate first and current session
     else
         _DBG_FirstSession = NULL;
 
+    _DBG_Session *Session = _DBG_CurrentSession;
     _DBG_CurrentSession = _DBG_CurrentSession->parent;
+
+    // free session
+    _DBG_DestroySession(Session);
 
     // Add removeTime to parent
     uint64_t EndTime = clock();
 
     if (_DBG_CurrentSession != NULL)
         _DBG_CurrentSession->removeTime += EndTime - StartTime;
+
+    return DBG_ERRORID_NOERROR;
 }
 
 #endif
