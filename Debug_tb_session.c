@@ -8,14 +8,24 @@ void PrintSessions(void);
 
 // Test init and quit functions
 int main(int argc, char **argv)
-{
+{/*
     // Setup error log and initialise
-    FILE *ErrorLog = fopen("c/Debug/DebugErrorLog.txt", "w");
+    FILE *ErrorLog = fopen("c/Debug/DebugErrorLog.txt", "w+");
 
     if (ErrorLog == NULL)
-        printf("Error creating log: %s\n\n", strerror(errno));
+        printf("Error creating log: %s\n", strerror(errno));
 
-    uint64_t ErrorID = DBG_Init(ErrorLog, 0);
+    FILE *ProfileLog = fopen("c/Debug/DebugProfileLog.txt", "w");
+
+    if (ProfileLog == NULL)
+        printf("Error creating profile log: %s\n\n", strerror(errno));
+
+    FILE *RunningLog = fopen("c/Debug/DebugRunningLog.txt", "w");
+
+    if (RunningLog == NULL)
+        printf("Error creating running log: %s\n\n", strerror(errno));
+*/
+    uint64_t ErrorID = DBG_Init((FILE *)1, NULL, NULL, 0);
 
 
 
@@ -44,7 +54,7 @@ int main(int argc, char **argv)
 
 
     // End session
-    printf("Ending second session: %lX\n", DBG_EndSession());
+    //printf("Ending second session: %lX\n", DBG_EndSession());
     PrintFunctions();
     PrintSessions();
     printf("\n");
@@ -52,7 +62,7 @@ int main(int argc, char **argv)
 
 
     // Start another session
-    printf("Starting first session again: %lX\n", DBG_StartSession("FirstFunction"));
+    //printf("Starting first session again: %lX\n", DBG_StartSession("FirstFunction"));
     PrintFunctions();
     PrintSessions();
     printf("\n");
@@ -60,7 +70,7 @@ int main(int argc, char **argv)
 
 
     // Start another session
-    printf("Starting second session: %lX\n", DBG_StartSession("SecondFunction"));
+    //printf("Starting second session: %lX\n", DBG_StartSession("SecondFunction"));
     PrintFunctions();
     PrintSessions();
     printf("\n");
@@ -68,7 +78,7 @@ int main(int argc, char **argv)
 
 
     // End session
-    printf("Ending second session: %lX\n", DBG_EndSession());
+    //printf("Ending second session: %lX\n", DBG_EndSession());
     PrintFunctions();
     PrintSessions();
     printf("\n");
@@ -76,7 +86,7 @@ int main(int argc, char **argv)
 
 
     // End session
-    printf("Ending first session: %lX\n", DBG_EndSession());
+    //printf("Ending first session: %lX\n", DBG_EndSession());
     PrintFunctions();
     PrintSessions();
     printf("\n");
@@ -84,7 +94,7 @@ int main(int argc, char **argv)
 
 
     // End session
-    printf("Ending first session again: %lX\n", DBG_EndSession());
+    //printf("Ending first session again: %lX\n", DBG_EndSession());
     PrintFunctions();
     PrintSessions();
     printf("\n");
@@ -92,7 +102,7 @@ int main(int argc, char **argv)
 
 
     // Start another session
-    printf("Starting first session: %lX\n", DBG_StartSession("FirstFunction"));
+    //printf("Starting first session: %lX\n", DBG_StartSession("FirstFunction"));
     PrintFunctions();
     PrintSessions();
     printf("\n");
@@ -100,7 +110,7 @@ int main(int argc, char **argv)
 
 
     // End session
-    printf("Ending first session: %lX\n", DBG_EndSession());
+    //printf("Ending first session: %lX\n", DBG_EndSession());
     PrintFunctions();
     PrintSessions();
     printf("\n");
@@ -108,18 +118,20 @@ int main(int argc, char **argv)
 
 
     // Close down
-    DBG_Quit();
-
+    //DBG_Quit();
+/*
     fclose(ErrorLog);
-
+    fclose(ProfileLog);
+    fclose(RunningLog);
+*/
     printf("Done\n");
-
+system("pause");
     return 0;
 }
 
 void PrintFunctions(void)
 {
-    extern _DBG_FunctionData **_DBG_Functions;
+    extern _DBG_FunctionData *_DBG_Functions[];
     extern uint32_t _DBG_FunctionCount;
 
     printf("Function count: %u\n", _DBG_FunctionCount);

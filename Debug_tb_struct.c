@@ -7,13 +7,17 @@
 int main(int argc, char **argv)
 {
     // Setup error log
-    FILE *ErrorLog = fopen("c/Debug/DebugErrorLog.txt", "w");
+    FILE *ErrorLog = fopen("c/Debug/DebugErrorLog.txt", "w+");
 
     if (ErrorLog == NULL)
         printf("Error creating log: %s\n", strerror(errno));
+    
+    FILE *ProfileLog = fopen("c/Debug/DebugProfileLog.txt", "w");
 
-    extern FILE *_DBG_ErrorLog;
-    _DBG_ErrorLog = ErrorLog;
+    if (ProfileLog == NULL)
+        printf("Error creating profile log: %s\n\n", strerror(errno));
+
+    uint64_t ErrorID = DBG_Init(ProfileLog, NULL, ErrorLog, 0);
 
     // Test session creation
     _DBG_Session *TestSession = _DBG_CreateSession(25, (_DBG_Session *)0xFFFFFFFF, 3);
@@ -39,7 +43,7 @@ int main(int argc, char **argv)
     // Give a time list
     TestFunctionData->count = 5;
     TestFunctionData->time = (uint64_t *)malloc(sizeof(uint64_t) * 5);
-    TestFunctionData->subTime = (uint64_t *)malloc(sizeof(uint64_t) * 5);
+    TestFunctionData->ownTime = (uint64_t *)malloc(sizeof(uint64_t) * 5);
 
     TestFunctionData->time[0] = 0;
     TestFunctionData->time[1] = 1;
@@ -47,18 +51,18 @@ int main(int argc, char **argv)
     TestFunctionData->time[3] = 3;
     TestFunctionData->time[4] = 4;
 
-    TestFunctionData->subTime[0] = 0;
-    TestFunctionData->subTime[1] = 10;
-    TestFunctionData->subTime[2] = 20;
-    TestFunctionData->subTime[3] = 30;
-    TestFunctionData->subTime[4] = 40;
+    TestFunctionData->ownTime[0] = 0;
+    TestFunctionData->ownTime[1] = 10;
+    TestFunctionData->ownTime[2] = 20;
+    TestFunctionData->ownTime[3] = 30;
+    TestFunctionData->ownTime[4] = 40;
 
     printf("Function data with time lists: %s\n\n", _DBG_PrintFunctionData(TestFunctionData));
 
     // Too long time list
     TestFunctionData->count = 6;
     TestFunctionData->time = (uint64_t *)realloc(TestFunctionData->time, sizeof(uint64_t) * 6);
-    TestFunctionData->subTime = (uint64_t *)realloc(TestFunctionData->subTime, sizeof(uint64_t) * 6);
+    TestFunctionData->ownTime = (uint64_t *)realloc(TestFunctionData->ownTime, sizeof(uint64_t) * 6);
 
     printf("Function data with long time lists: %s\n\n", _DBG_PrintFunctionData(TestFunctionData));
 
@@ -78,7 +82,10 @@ int main(int argc, char **argv)
 
     _DBG_DestroyFunctionData(TooLongName);
 
+    DBG_Quit();
+
     fclose(ErrorLog);
+    fclose(ProfileLog);
 
     return 0;
 }

@@ -75,7 +75,8 @@ enum DBG_ErrorID
     DBG_ERRORID_NOERROR = 0x00000000,
     DBG_ERRORID_INIT_MALLOC = 0x100010300,
     DBG_ERRORID_INIT_INIT = 0x100010201,
-    DBG_ERRORID_QUIT_INIT = 0x100020200,
+    DBG_ERRORID_INIT_PROFILELOG = 0x100010302,
+    DBG_ERRORID_QUIT_INIT = 0x100020300,
     DBG_ERRORID_QUIT_NULL = 0x100020101,
     DBG_ERRORID_QUIT_SESSION = 0x100020102,
     DBG_ERRORID_CREATESESSION_MALLOC = 0x100030200,
@@ -88,8 +89,12 @@ enum DBG_ErrorID
     DBG_ERRORID_STARTSESSION_CREATEFUNCTION = 0x100070301,
     DBG_ERRORID_STARTSESSION_REALLOC = 0x100070302,
     DBG_ERRORID_STARTSESSION_CREATESESSION = 0x100070303,
+    DBG_ERRORID_STARTSESSION_RUNNINGLOG = 0x100070104,
+    DBG_ERRORID_STARTSESSION_INIT = 0x100070305,
     DBG_ERRORID_ENDSESSION_NONEOPEN = 0x100080300,
-    DBG_ERRORID_ENDSESSION_REALLOC = 0x100080301
+    DBG_ERRORID_ENDSESSION_REALLOC = 0x100080301,
+    DBG_ERRORID_ENDSESSION_INIT = 0x100080302,
+    DBG_ERRORID_ENDSESSION_RUNNINGLOG = 0x100080103
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory"
@@ -102,12 +107,17 @@ enum DBG_ErrorID
 #define _DBG_ERRORMES_ARGNULL "Argument \"%s\" was NULL"
 #define _DBG_ERRORMES_CREATESTRUCT "Unable to create \"%s\" struct"
 #define _DBG_ERRORMES_NOOPENSESSION "Attempting to close session with no open sessions"
+#define _DBG_ERRORMES_WRITEFILE "Unable to write to the \"%s\" file"
 
 // Flags
 enum DBG_Flags
 {
     DBG_FLAG_NOFLAG = 0
 };
+
+// Running log messages
+#define _DBG_RUNNINGLOG_STARTSESSION "%*.lu: Started session \"%s\"\n"
+#define _DBG_RUNNINGLOG_ENDSESSION "%*.lu: Ended session   \"%s\", TotalTime = %lu, OwnTime = %lu\n"
 
 // struct print max length
 #define DBG_PRINTSTRUCT_MAXLENGTH 1000
@@ -120,11 +130,17 @@ _DBG_Session *_DBG_CurrentSession = NULL;
 
 // List of all the functions
 _DBG_FunctionData _DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .time = NULL, .ownTime = NULL};
-_DBG_FunctionData **_DBG_Functions = NULL;
+_DBG_FunctionData *_DBG_Functions[10];
 uint32_t _DBG_FunctionCount = 0;
 
 // Flags for what to save
 uint64_t _DBG_UsedFlags = 0;
+
+// File to save the profile
+FILE *_DBG_ProfileLog = NULL;
+
+// File to save running log
+FILE *_DBG_RunningLog = NULL;
 
 // String to print structs in
 char _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH] = "No struct printed yet";
@@ -165,7 +181,7 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData);
 // Returns 0 on success and an error code on failure
 // ErrorLog: A text file pointer to where it can write the error messages, NULL if it should not write any messages
 // Flags: Contains all the information for what data to save, options are from DBG_Flags
-uint64_t DBG_Init(FILE *ErrorLog, uint64_t Flags);
+uint64_t DBG_Init(FILE *ProfileLog, FILE *RunningLog, FILE *ErrorLog, uint64_t Flags);
 
 // Closes down everything and frees allocated memory
 void DBG_Quit(void);
@@ -270,7 +286,7 @@ char *_DBG_PrintSession(const _DBG_Session *Session)
 char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
 {
     extern char _DBG_PrintStructString[];
-
+/*
     // Convert the list of times to strings
     char TimeString[DBG_PRINTSTRUCT_MAXLENGTH];
     char OwnTimeString[DBG_PRINTSTRUCT_MAXLENGTH];
@@ -374,9 +390,11 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
         *(String - 2) = ']';
         *(String - 1) = '\0';
     }
-
+*/
     // Print the struct
-    Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, name = \"%s\", count = %u, time = %s, ownTime = %s}",
+    char TimeString[] = "";
+    char OwnTimeString[] = "";
+    uint32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, name = \"%s\", count = %u, time = %s, ownTime = %s}",
                                                                            FunctionData->ID, FunctionData->name, FunctionData->count, TimeString, OwnTimeString);
 
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
@@ -391,11 +409,22 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
     return _DBG_PrintStructString;
 }
 
-uint64_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
+uint64_t DBG_Init(FILE *ProfileLog, FILE *RunningLog, FILE *ErrorLog, uint64_t Flags)
 {
-    extern _DBG_FunctionData **_DBG_Functions;
+    extern _DBG_FunctionData *_DBG_Functions[];
     extern uint32_t _DBG_FunctionCount;
     extern uint64_t _DBG_UsedFlags;
+    extern FILE *_DBG_RunningLog;
+    extern FILE *_DBG_ProfileLog;
+    extern _DBG_FunctionData _DBG_FunctionMain;
+/*
+    // Make sure input is valid
+    if (ProfileLog == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_INIT_PROFILELOG, _DBG_ERRORMES_ARGNULL, "ProfileLog");
+
+        return DBG_ERRORID_INIT_PROFILELOG;
+    }
 
     // Make sure it has not been initialised already
     if (_DBG_Functions != NULL)
@@ -408,20 +437,26 @@ uint64_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
     // Set error log file
     _DBG_SetLogFile(ErrorLog);
 
-    // Allocate memory for the functions
-    _DBG_Functions = (_DBG_FunctionData **)malloc(sizeof(_DBG_FunctionData));
+    // Set running log
+    _DBG_RunningLog = RunningLog;
 
+    // Set profile log
+    _DBG_ProfileLog = ProfileLog;
+*//*
+    // Allocate memory for the functions
+    _DBG_Functions = (_DBG_FunctionData **)malloc(sizeof(_DBG_FunctionData *));
+    
     if (_DBG_Functions == NULL)
     {
         _DBG_AddErrorForeign(DBG_ERRORID_INIT_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
 
         return DBG_ERRORID_INIT_MALLOC;
     }
-
+*/
     _DBG_FunctionCount = 1;
 
     // Setup the main function
-    _DBG_Functions[0] = &_DBG_FunctionMain;
+    *_DBG_Functions = &_DBG_FunctionMain;
 
     // Setup flags
     _DBG_UsedFlags = Flags;
@@ -431,9 +466,11 @@ uint64_t DBG_Init(FILE *ErrorLog, uint64_t Flags)
 
 void DBG_Quit(void)
 {
-    extern _DBG_FunctionData **_DBG_Functions;
+    extern _DBG_FunctionData *_DBG_Functions[];
     extern uint32_t _DBG_FunctionCount;
     extern uint64_t _DBG_UsedFlags;
+    extern FILE *_DBG_RunningLog;
+    extern FILE *_DBG_ProfileLog;
 
     // Make sure it has been initialised
     if (_DBG_Functions == NULL)
@@ -478,12 +515,14 @@ void DBG_Quit(void)
     _DBG_FirstSession = NULL;
 
     // Free the functions list
-    free(_DBG_Functions);
+    //free(_DBG_Functions);
 
     // Reset values
     _DBG_FunctionCount = 0;
-    _DBG_Functions = NULL;
+    //_DBG_Functions = NULL;
     _DBG_UsedFlags = 0;
+    _DBG_ProfileLog = NULL;
+    _DBG_RunningLog = NULL;
 
     // Reset the log file
     _DBG_SetLogFile(NULL);
@@ -494,8 +533,8 @@ uint64_t DBG_StartSession(char *Name)
     uint64_t StartTime = clock();
 
     extern uint32_t _DBG_FunctionCount;
-    extern _DBG_FunctionData **_DBG_Functions;
-
+    extern _DBG_FunctionData *_DBG_Functions[];
+/*
     // Make sure name is not NULL
     if (Name == NULL)
     {
@@ -504,16 +543,24 @@ uint64_t DBG_StartSession(char *Name)
         return DBG_ERRORID_STARTSESSION_NAME;
     }
 
+    // Make sure it has been initialised
+    if (_DBG_Functions == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_STARTSESSION_INIT, _DBG_ERRORMES_NOINIT);
+
+        return DBG_ERRORID_STARTSESSION_INIT;
+    }
+*/
     // Find the function
     _DBG_FunctionData *FoundFunction = NULL;
-
+/*
     for (_DBG_FunctionData **FunctionList = _DBG_Functions, **EndFunctionList = _DBG_Functions + _DBG_FunctionCount; FunctionList < EndFunctionList; ++FunctionList)
         if (strcmp((*FunctionList)->name, Name) == 0)
         {
             FoundFunction = *FunctionList;
             break;
         }
-
+*/
     // Create new function if it didn't exist
     if (FoundFunction == NULL)
     {
@@ -526,7 +573,7 @@ uint64_t DBG_StartSession(char *Name)
 
             return DBG_ERRORID_STARTSESSION_CREATEFUNCTION;
         }
-
+/*
         _DBG_FunctionData **NewFunctionList = (_DBG_FunctionData **)realloc(_DBG_Functions, sizeof(_DBG_FunctionData *) * (_DBG_FunctionCount + 1));
 
         if (NewFunctionList == NULL)
@@ -537,7 +584,7 @@ uint64_t DBG_StartSession(char *Name)
         }
 
         // Insert the new function
-        _DBG_Functions = NewFunctionList;
+        _DBG_Functions = NewFunctionList;*/
         _DBG_Functions[_DBG_FunctionCount++] = FoundFunction;
     }
 
@@ -554,7 +601,7 @@ uint64_t DBG_StartSession(char *Name)
 
         return DBG_ERRORID_STARTSESSION_CREATESESSION;
     }
-
+    
     // Set starting time
     NewSession->startTime = StartTime;
 
@@ -566,20 +613,35 @@ uint64_t DBG_StartSession(char *Name)
 
     if (_DBG_FirstSession == NULL)
         _DBG_FirstSession = NewSession;
+/*
+    // Write to running log
+    extern FILE *_DBG_RunningLog;
+
+    if (_DBG_RunningLog != NULL)
+        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_STARTSESSION, 14 + NewSession->depth, StartTime, Name) < 0)
+            _DBG_AddErrorForeign(DBG_ERRORID_STARTSESSION_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
 
     uint64_t EndTime = clock();
 
     NewSession->removeTime = EndTime - StartTime;
-
+*/
     return DBG_ERRORID_NOERROR;
 }
 
 uint64_t DBG_EndSession(void)
-{
+{printf("End\n");
     uint64_t StartTime = clock();
 
     extern _DBG_Session *_DBG_CurrentSession;
     extern _DBG_Session *_DBG_FirstSession;
+
+    // Make sure it has been initialised
+    if (_DBG_Functions == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_ENDSESSION_INIT, _DBG_ERRORMES_NOINIT);
+
+        return DBG_ERRORID_ENDSESSION_INIT;
+    }
 
     // Make sure something is open
     if (_DBG_CurrentSession == NULL)
@@ -593,7 +655,7 @@ uint64_t DBG_EndSession(void)
     uint64_t OwnTime = TotalTime - _DBG_CurrentSession->subTime;
 
     // Add time to function time list
-    extern _DBG_FunctionData **_DBG_Functions;
+    extern _DBG_FunctionData *_DBG_Functions[];
 
     uint64_t *NewTime = (uint64_t *)realloc(_DBG_Functions[_DBG_CurrentSession->ID]->time, sizeof(uint64_t) * (_DBG_Functions[_DBG_CurrentSession->ID]->count + 1));
     uint64_t *NewOwnTime = (uint64_t *)realloc(_DBG_Functions[_DBG_CurrentSession->ID]->ownTime, sizeof(uint64_t) * (_DBG_Functions[_DBG_CurrentSession->ID]->count + 1));
@@ -625,6 +687,13 @@ uint64_t DBG_EndSession(void)
     _DBG_Session *Session = _DBG_CurrentSession;
     _DBG_CurrentSession = _DBG_CurrentSession->parent;
 
+    // Write to running log
+    extern FILE *_DBG_RunningLog;
+
+    if (_DBG_RunningLog != NULL)
+        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_ENDSESSION, 14 + Session->depth, StartTime, _DBG_Functions[Session->ID]->name, TotalTime, OwnTime) < 0)
+            _DBG_AddErrorForeign(DBG_ERRORID_ENDSESSION_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
+
     // free session
     _DBG_DestroySession(Session);
 
@@ -646,7 +715,7 @@ uint64_t DBG_EndSession(void)
 #define DBG_GetError() NULL
 
 // Init and quit should alwas return no error
-#define DBG_Init(ErrorLog, Flags) 0
+#define DBG_Init(ProfileLog, RunningLog, ErrorLog, Flags) 0
 #define DBG_Quit()
 
 // Start and end session always return no error
