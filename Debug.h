@@ -112,8 +112,25 @@ enum DBG_ErrorID
 // Flags
 enum DBG_Flags
 {
-    DBG_FLAG_NOFLAG = 0
+    DBG_FLAGS_NOFLAG = 0x00,
+    DBG_FLAGS_TOTAL = 0x01,
+    DBG_FLAGS_AVG = 0x02,
+    DBG_FLAGS_STD = 0x04,
+    DBG_FLAGS_LIST = 0x08,
+    DBG_FLAGS_TIME = 0x0100,
+    DBG_FLAGS_OWNTIME = 0x0200
 };
+
+#define DBG_FLAGS_STATS 0xFF
+#define DBG_FLAGS_TYPE 0xFF00
+
+// texts for profile
+#define _DBG_PROFILETEXT_TOTAL "Total"
+#define _DBG_PROFILETEXT_AVG "Avg"
+#define _DBG_PROFILETEXT_STD "Std"
+#define _DBG_PROFILETEXT_LIST "Data"
+#define _DBG_PROFILETEXT_TIME "Total Time"
+#define _DBG_PROFILETEXT_OWNTIME "Own Time"
 
 // Running log messages
 #define _DBG_RUNNINGLOG_STARTSESSION "%*.lu: Started session \"%s\"\n"
@@ -122,6 +139,9 @@ enum DBG_Flags
 // struct print max length
 #define DBG_PRINTSTRUCT_MAXLENGTH 1000
 #define DBG_PRINTSTRUCT_LISTMAXLENGTH 5
+
+// Internal format string max length
+#define _DBG_FORMATSTRING_MAXLENGTH 1000
 
 // global variables
 // The outer most session, NULL if no session has been started
@@ -176,6 +196,14 @@ char *_DBG_PrintSession(const _DBG_Session *Session);
 // Returns a pointer to the string
 // FunctionData: The struct to turn into a string
 char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData);
+
+// Writes the profile file
+// Returns 0 on success and error code on failure
+uint64_t _DBG_CreateProfile(void);
+
+uint64_t _DBG_CreateProfileFunctionData(void);
+
+uint64_t _DBG_CreateProfileStats(void);
 
 // Initialises debugging
 // Returns 0 on success and an error code on failure
@@ -405,6 +433,25 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
     }
 
     return _DBG_PrintStructString;
+}
+
+uint64_t _DBG_CreateProfile(void)
+{
+    extern FILE *_DBG_ProfileLog;
+    extern uint64_t _DBG_UsedFlags;
+
+    // Create the format string
+    int32_t Length;
+    int32_t MaxLength = _DBG_FORMATSTRING_MAXLENGTH - 6;
+    char SubFormat[_DBG_FORMATSTRING_MAXLENGTH] = "%s = {";
+    char *String = SubFormat + 6;
+
+    if (_DBG_UsedFlags & DBG_FLAGS_TOTAL)
+    {
+        Length = snprintf(String, MaxLength, _DBG_PROFILETEXT_TOTAL);
+    }
+
+    return DBG_ERRORID_NOERROR;
 }
 
 uint64_t DBG_Init(FILE *ProfileLog, FILE *RunningLog, FILE *ErrorLog, uint64_t Flags)

@@ -1,10 +1,10 @@
-          1653: Started session "FirstFunction"
-           1731: Started session "SecondFunction"
-           1820: Ended session   "SecondFunction", TotalTime = 85, OwnTime = 85
-           1899: Started session "FirstFunction"
-            1991: Started session "SecondFunction"
-            2086: Ended session   "SecondFunction", TotalTime = 93, OwnTime = 93
-           2178: Ended session   "FirstFunction", TotalTime = 272, OwnTime = 179
-          2267: Ended session   "FirstFunction", TotalTime = 580, OwnTime = 223
-          2343: Started session "FirstFunction"
-          2425: Ended session   "FirstFunction", TotalTime = 80, OwnTime = 80
+          1759: Started session "FirstFunction"
+           1841: Started session "SecondFunction"
+           1929: Ended session   "SecondFunction", TotalTime = 84, OwnTime = 84
+           1994: Started session "FirstFunction"
+            2085: Started session "SecondFunction"
+            2182: Ended session   "SecondFunction", TotalTime = 94, OwnTime = 94
+           2266: Ended session   "FirstFunction", TotalTime = 264, OwnTime = 170
+          2362: Ended session   "FirstFunction", TotalTime = 568, OwnTime = 220
+          2463: Started session "FirstFunction"
+          2562: Ended session   "FirstFunction", TotalTime = 97, OwnTime = 97
