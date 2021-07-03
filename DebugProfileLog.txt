@@ -1,0 +1,55 @@
+main = {
+    Total Time = {
+        Total = 0,
+        Avg = -nan,
+        Std = -nan
+    },
+
+    Own Time = {
+        Total = 0,
+        Avg = -nan,
+        Std = -nan
+    }
+},
+
+CountSquares = {
+    Total Time = {
+        Total = 0.64,
+        Avg = 0.64,
+        Std = 0
+    },
+
+    Own Time = {
+        Total = 0.0014,
+        Avg = 0.0014,
+        Std = 0
+    }
+},
+
+SquareNum = {
+    Total Time = {
+        Total = 0.63,
+        Avg = 0.00063,
+        Std = 4.3
+    },
+
+    Own Time = {
+        Total = 0.32,
+        Avg = 0.00032,
+        Std = 4.3
+    }
+},
+
+GetNextNum = {
+    Total Time = {
+        Total = 0.31,
+        Avg = 6.3e-07,
+        Std = 0.0086
+    },
+    
+    Own Time = {
+        Total = 0.31,
+        Avg = 6.3e-07,
+        Std = 0.0086
+    }
+}

@@ -17,7 +17,7 @@ int main(int argc, char **argv)
     if (ProfileLog == NULL)
         printf("Error creating profile log: %s\n\n", strerror(errno));
 
-    uint64_t ErrorID = DBG_Init(ProfileLog, NULL, ErrorLog, 0);
+    uint64_t ErrorID = DBG_Init(ProfileLog, NULL, ErrorLog, 0, 0);
 
     // Test session creation
     _DBG_Session *TestSession = _DBG_CreateSession(25, (_DBG_Session *)0xFFFFFFFF, 3);

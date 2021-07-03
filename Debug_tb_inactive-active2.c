@@ -10,7 +10,7 @@
 int main(int argc, char **argv)
 {
     // Make sure it has defined things correctly
-    printf("Checking Init: '%s'\n", STR(DBG_Init(NULL, 0)));
+    printf("Checking Init: '%s'\n", STR(DBG_Init(NULL, NULL, NULL, 0, 0)));
     printf("Checking Quit: '%s'\n", STR(DBG_Quit()));
     printf("Checking GetError: '%s'\n", STR(DBG_GetError()));
 

@@ -25,7 +25,7 @@ int main(int argc, char **argv)
     if (RunningLog == NULL)
         printf("Error creating running log: %s\n\n", strerror(errno));
 
-    uint64_t ErrorID = DBG_Init(ProfileLog, RunningLog, ErrorLog, 0);
+    uint64_t ErrorID = DBG_Init(ProfileLog, RunningLog, ErrorLog, 0, 0);
 
 
 

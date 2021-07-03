@@ -59,7 +59,7 @@ int main(int argc, char **argv)
 
 
     // Print values after init
-    uint64_t ErrorID = DBG_Init(ProfileLog, (FILE *)5, ErrorLog, 0xF);
+    uint64_t ErrorID = DBG_Init(ProfileLog, (FILE *)5, ErrorLog, 0xF, 0);
 
     if (ErrorID != DBG_ERRORID_NOERROR)
         printf("Error initialising: %s\n\n", DBG_GetError());
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
 
 
     // make sure error is given in init when already initialised
-    if (DBG_Init(ProfileLog, NULL, NULL, 0xFF) != DBG_ERRORID_NOERROR)
+    if (DBG_Init(ProfileLog, NULL, NULL, 0xFF, 0) != DBG_ERRORID_NOERROR)
         printf("Error initialising twice: %s\n", DBG_GetError());
 
     // Flags
