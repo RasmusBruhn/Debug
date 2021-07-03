@@ -21,15 +21,10 @@ int main(int argc, char **argv)
     if (ProfileLog == NULL)
         printf("Error creating profile log: %s\n\n", strerror(errno));
 
-    FILE *RunningLog = fopen("DebugRunningLog.txt", "w");
+    // DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD | DBG_FLAGS_MIN | DBG_FLAGS_MAX | DBG_FLAGS_LIST;
+    uint64_t Flags = DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD | DBG_FLAGS_MIN | DBG_FLAGS_MAX;
 
-    if (RunningLog == NULL)
-        printf("Error creating running log: %s\n\n", strerror(errno));
-
-    // DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD | DBG_FLAGS_LIST;
-    uint64_t Flags = DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD;
-
-    uint64_t ErrorID = DBG_Init(ProfileLog, RunningLog, ErrorLog, Flags, 0);
+    uint64_t ErrorID = DBG_Init(ProfileLog, NULL, ErrorLog, Flags, 0);
 
     printf("Number = %lu\n", CountSquares(1000));
 
@@ -38,7 +33,6 @@ int main(int argc, char **argv)
 
     fclose(ErrorLog);
     fclose(ProfileLog);
-    fclose(RunningLog);
 
     printf("Done\n");
 

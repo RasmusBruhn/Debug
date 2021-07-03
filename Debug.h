@@ -119,7 +119,11 @@ enum DBG_ErrorID
     DBG_ERRORID_CREATEPROFILESTATS_LIST2 = 0x1000A0307,
     DBG_ERRORID_CREATEPROFILESTATS_LIST3 = 0x1000A0308,
     DBG_ERRORID_CREATEPROFILESTATS_LIST4 = 0x1000A0309,
-    DBG_ERRORID_CREATEPROFILESTATS_LIST5 = 0x1000A030A
+    DBG_ERRORID_CREATEPROFILESTATS_LIST5 = 0x1000A030A,
+    DBG_ERRORID_CREATEPROFILESTATS_MIN1 = 0x1000A030B,
+    DBG_ERRORID_CREATEPROFILESTATS_MIN2 = 0x1000A030C,
+    DBG_ERRORID_CREATEPROFILESTATS_MAX1 = 0x1000A030D,
+    DBG_ERRORID_CREATEPROFILESTATS_MAX2 = 0x1000A030E
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory"
@@ -143,6 +147,8 @@ enum DBG_Flags
     DBG_FLAGS_AVG = 0x02,
     DBG_FLAGS_STD = 0x04,
     DBG_FLAGS_LIST = 0x08,
+    DBG_FLAGS_MIN = 0x10,
+    DBG_FLAGS_MAX = 0x20,
     DBG_FLAGS_TIME = 0x0100,
     DBG_FLAGS_OWNTIME = 0x0200
 };
@@ -155,6 +161,8 @@ enum DBG_Flags
 #define _DBG_PROFILETEXT_TOTAL "Total"
 #define _DBG_PROFILETEXT_AVG "Avg"
 #define _DBG_PROFILETEXT_STD "Std"
+#define _DBG_PROFILETEXT_MIN "Min"
+#define _DBG_PROFILETEXT_MAX "Max"
 #define _DBG_PROFILETEXT_LIST "Data"
 #define _DBG_PROFILETEXT_TIME "Total Time"
 #define _DBG_PROFILETEXT_OWNTIME "Own Time"
@@ -649,11 +657,19 @@ uint64_t _DBG_CreateProfileStats(uint64_t *Time, uint32_t Count)
     // Calculate the statistics
     uint64_t Total = 0;
     uint64_t TotalSqr = 0;
+    uint64_t Min = -1;
+    uint64_t Max = 0;
 
     for (uint64_t *Data = Time, *EndData = Time + Count; Data < EndData; ++Data)
     {
         Total += *Data;
         TotalSqr += (*Data) * (*Data);
+
+        if (*Data < Min)
+            Min = *Data;
+
+        if (*Data > Max)
+            Max = *Data;
     }
 
     bool FirstLine = true;
@@ -741,6 +757,64 @@ uint64_t _DBG_CreateProfileStats(uint64_t *Time, uint32_t Count)
             _DBG_AddErrorForeign(DBG_ERRORID_CREATEPROFILESTATS_STD2, strerror(errno), _DBG_ERRORMES_WRITEFILE, "ProfileLog");
 
             return DBG_ERRORID_CREATEPROFILESTATS_STD2;
+        }
+
+        FirstLine = false;
+    }
+
+    // Write the minimum time
+    if (_DBG_UsedFlags & DBG_FLAGS_MIN)
+    {
+        // Add , when not the first line
+        if (!FirstLine)
+        {
+            Length = fprintf(_DBG_ProfileLog, ",\n");
+
+            if (Length < 0)
+            {
+                _DBG_AddErrorForeign(DBG_ERRORID_CREATEPROFILESTATS_MIN1, strerror(errno), _DBG_ERRORMES_WRITEFILE, "ProfileLog");
+
+                return DBG_ERRORID_CREATEPROFILESTATS_MIN1;
+            }
+        }
+
+        // Write the data
+        Length = fprintf(_DBG_ProfileLog, "        %s = %.*g", _DBG_PROFILETEXT_MIN, _DBG_Precision, (double)Min / (double)CLOCKS_PER_SEC);
+
+        if (Length < 0)
+        {
+            _DBG_AddErrorForeign(DBG_ERRORID_CREATEPROFILESTATS_MIN2, strerror(errno), _DBG_ERRORMES_WRITEFILE, "ProfileLog");
+
+            return DBG_ERRORID_CREATEPROFILESTATS_MIN2;
+        }
+
+        FirstLine = false;
+    }
+
+    // Write the maximum time
+    if (_DBG_UsedFlags & DBG_FLAGS_MAX)
+    {
+        // Add , when not the first line
+        if (!FirstLine)
+        {
+            Length = fprintf(_DBG_ProfileLog, ",\n");
+
+            if (Length < 0)
+            {
+                _DBG_AddErrorForeign(DBG_ERRORID_CREATEPROFILESTATS_MAX1, strerror(errno), _DBG_ERRORMES_WRITEFILE, "ProfileLog");
+
+                return DBG_ERRORID_CREATEPROFILESTATS_MAX1;
+            }
+        }
+
+        // Write the data
+        Length = fprintf(_DBG_ProfileLog, "        %s = %.*g", _DBG_PROFILETEXT_MAX, _DBG_Precision, (double)Max / (double)CLOCKS_PER_SEC);
+
+        if (Length < 0)
+        {
+            _DBG_AddErrorForeign(DBG_ERRORID_CREATEPROFILESTATS_MAX2, strerror(errno), _DBG_ERRORMES_WRITEFILE, "ProfileLog");
+
+            return DBG_ERRORID_CREATEPROFILESTATS_MAX2;
         }
 
         FirstLine = false;
