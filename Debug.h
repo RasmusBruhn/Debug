@@ -45,6 +45,8 @@ void DBG_ExitFunc(uint64_t ErrorID);
 // Structs
 typedef struct __DBG_Session _DBG_Session;
 typedef struct __DBG_FunctionData _DBG_FunctionData;
+typedef struct __DBG_Stats _DBG_Stats;
+typedef struct __DBG_SubStats _DBG_SubStats;
 
 // Data for a session, a session starts when a function is executed and ends when the function is done
 struct __DBG_Session
@@ -66,6 +68,25 @@ struct __DBG_FunctionData
     uint32_t count;         // The number of times this function has been executed
     uint64_t *time;         // List of time spent in each of the sessions with time in sub sessions
     uint64_t *ownTime;      // List of time spent in each of the sessions without time in sub sessions
+};
+
+// All stats for one type of time data
+struct __DBG_SubStats
+{
+    uint64_t total;         // The total time
+    uint64_t avg;           // The average time
+    uint64_t std;           // The standard deviation of the average time
+    uint64_t min;           // The minimum time
+    uint64_t max;           // The maximum time
+    uint64_t *list;         // A list of all the times
+};
+
+// All stats calculated for a function
+struct __DBG_Stats
+{
+    uint32_t ID;            // The ID of the function
+    _DBG_SubStats time;     // The total time
+    _DBG_SubStats ownTime;  // The time without time in sub sesssions
 };
 
 // Contants
