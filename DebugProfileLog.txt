@@ -1,71 +1,53 @@
-main = {
+GetNextNum = {
     Total Time = {
-        Total = 0,
-        Avg = -nan,
-        Std = -nan,
-        Min = 1.8e+13,
-        Max = 0
+        Total = 0.00022,
+        Avg = 2.2e-07,
+        Std = 4.3,
+        Min = 0,
+        Max = 1.6e-05
     },
 
     Own Time = {
-        Total = 0,
-        Avg = -nan,
-        Std = -nan,
-        Min = 1.8e+13,
-        Max = 0
+        Total = 0.00022,
+        Avg = 2.2e-07,
+        Std = 4.3,
+        Min = 0,
+        Max = 1.6e-05
     }
 },
 
 CountSquares = {
     Total Time = {
-        Total = 0.55,
-        Avg = 0.55,
-        Std = 0,
-        Min = 0.55,
-        Max = 0.55
+        Total = 0,
+        Avg = -nan,
+        Std = -nan,
+        Min = 1.8e+13,
+        Max = 0
     },
 
     Own Time = {
-        Total = 0.0012,
-        Avg = 0.0012,
-        Std = 0,
-        Min = 0.0012,
-        Max = 0.0012
+        Total = 0,
+        Avg = -nan,
+        Std = -nan,
+        Min = 1.8e+13,
+        Max = 0
     }
 },
 
 SquareNum = {
     Total Time = {
-        Total = 0.55,
-        Avg = 0.00055,
-        Std = 4.3,
-        Min = 2e-06,
-        Max = 0.0014
+        Total = 0,
+        Avg = 0,
+        Std = 0,
+        Min = 0,
+        Max = 0
     },
 
     Own Time = {
-        Total = 0.28,
-        Avg = 0.00028,
-        Std = 4.3,
-        Min = 2e-06,
-        Max = 0.00073
-    }
-},
-
-GetNextNum = {
-    Total Time = {
-        Total = 0.28,
-        Avg = 5.5e-07,
-        Std = 0.0086,
+        Total = 0,
+        Avg = 0,
+        Std = 0,
         Min = 0,
-        Max = 4e-05
-    },
-
-    Own Time = {
-        Total = 0.28,
-        Avg = 5.5e-07,
-        Std = 0.0086,
-        Min = 0,
-        Max = 4e-05
+        Max = 0
     }
 }
