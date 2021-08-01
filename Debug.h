@@ -49,6 +49,7 @@ typedef struct __DBG_Session _DBG_Session;
 typedef struct __DBG_FunctionData _DBG_FunctionData;
 typedef struct __DBG_Stats _DBG_Stats;
 typedef struct __DBG_SubStats _DBG_SubStats;
+typedef struct __DBG_Memory _DBG_Memory;
 
 // Data for a session, a session starts when a function is executed and ends when the function is done
 struct __DBG_Session
@@ -90,6 +91,14 @@ struct __DBG_Stats
     uint32_t ID;                // The ID of the function
     _DBG_SubStats time;         // The total time
     _DBG_SubStats ownTime;      // The time without time in sub sesssions
+};
+
+struct __DBG_Memory
+{
+    char *name;                 // The name of the memory allocated, does not have to be unique
+    uint32_t *history;          // A list off all functions that lead to the allocation of this memory
+    void *pointer;              // The pointer to the allocated memory
+    size_t size;                // The size of the allocated memory
 };
 
 // Contants
@@ -227,6 +236,10 @@ _DBG_FunctionData _DBG_FunctionMain = {.ID = 0, .name = "main", .count = 0, .tim
 _DBG_FunctionData **_DBG_Functions = NULL;
 uint32_t _DBG_FunctionCount = 0;
 
+// List of all the allocated memory
+_DBG_Memory **_DBG_MemoryList = NULL;
+uint32_t _DBG_MemoryCount = 0;
+
 // Flags for what to save
 uint64_t _DBG_UsedFlags = _DBG_STANDARD_FLAGS;
 
@@ -264,6 +277,13 @@ _DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, char *Name);
 // Returns a pointer to the struct, NULL on error
 // ID: The ID of the function these stats belong to
 _DBG_Stats *_DBG_CreateStats(uint32_t ID);
+
+// Allocates memory for and initialises a Memory struct
+// Returns a pointer to the struct, NULL on error
+// Name: A name for the allocated memory, this does not have to be unique, only used for displaying
+// Pointer: The pointer to the allocated memory
+// Size: The size of the block of memory
+_DBG_Memory *_DBG_CreateMemory(char *Name, void *Pointer, size_t Size);
 
 // Frees a Session struct and all memory allocated for it
 // Session: The struct to free
@@ -1178,6 +1198,8 @@ void DBG_Quit(void)
     extern uint64_t _DBG_UsedFlags;
     extern FILE *_DBG_RunningLog;
     extern FILE *_DBG_ProfileLog;
+    extern _DBG_Memory **_DBG_MemoryList;
+    extern uint32_t _DBG_MemoryCount;
 
     // Make sure it has been initialised
     if (_DBG_Functions == NULL)
@@ -1232,12 +1254,25 @@ void DBG_Quit(void)
     // Free the functions list
     free(_DBG_Functions);
 
+    // Check if there are memory leaks
+
+    // Free memory list
+    if (_DBG_MemoryList != NULL)
+    {
+        for (_DBG_Memory **List = _DBG_MemoryList, **EndList = _DBG_MemoryList + _DBG_MemoryCount; List < EndList; ++List)
+            _DBG_DestroyMemory(*List);
+
+        free(_DBG_MemoryList);
+    }
+
     // Reset values
     _DBG_FunctionCount = 0;
     _DBG_Functions = NULL;
     _DBG_UsedFlags = 0;
     _DBG_ProfileLog = NULL;
     _DBG_RunningLog = NULL;
+    _DBG_MemoryList = NULL;
+    _DBG_MemoryCount = 0;
 
     // Reset the log file
     _DBG_SetLogFile(NULL);
