@@ -60,7 +60,7 @@ struct __DBG_Session
     uint64_t removeTime;        // How much time has been used by DBG functions inside this session
     _DBG_Session *child;        // What session is running inside this session, NULL if it doesn't have another session running
     _DBG_Session *parent;       // What session is this session running in, NULL if it doesn't run in another session
-    uint32_t depth;             // How many sessions are above this one, 0 when there are none above it
+    uint32_t depth;             // How many sessions are above this one, 1 when there are none above it
 };
 
 // All the important data for the functions used
@@ -93,10 +93,12 @@ struct __DBG_Stats
     _DBG_SubStats ownTime;      // The time without time in sub sesssions
 };
 
+// All data important for knowing memory alloation
 struct __DBG_Memory
 {
     char *name;                 // The name of the memory allocated, does not have to be unique
     uint32_t *history;          // A list off all functions that lead to the allocation of this memory
+    uint32_t depth;             // The depth of the current session
     void *pointer;              // The pointer to the allocated memory
     size_t size;                // The size of the allocated memory
 };
@@ -158,7 +160,9 @@ enum DBG_ErrorID
     DBG_ERRORID_CREATESTATS_MALLOC = 0x1000B0200,
     DBG_ERRORID_PRINTSTATS_LONG = 0x1000C0100,
     DBG_ERRORID_PRINTLIST_LONG = 0x1000D0100,
-    DBG_ERRORID_PRINTSUBSTATS_LONG = 0x1000E0100
+    DBG_ERRORID_PRINTSUBSTATS_LONG = 0x1000E0100,
+    DBG_ERRORID_CREATEMEMORY_MALLOC = 0x1000F0200,
+    DBG_ERRORID_CREATEMEMORY_MALLOC2 = 0x1000F0201
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory"
@@ -222,9 +226,6 @@ enum DBG_Flags
 #define _DBG_STANDARD_SORTOFFSET_STATS offsetof(_DBG_SubStats, total)
 #define _DBG_STANDARD_SORTOFFSET (_DBG_STANDARD_SORTOFFSET_TYPE + _DBG_STANDARD_SORTOFFSET_STATS)
 #define _DBG_STANDARD_SORTINVERT false
-
-// For printing pointers
-#define _DBG_POINTERTOINT uint32_t
 
 // global variables
 // The outer most session, NULL if no session has been started
@@ -297,6 +298,10 @@ void _DBG_DestroyFunctionData(_DBG_FunctionData *FunctionData);
 // Stats: The struct to free
 void _DBG_DestroyStats(_DBG_Stats *Stats);
 
+// Frees a Memory struct and all memory allocated for it
+// Memory: The struct to free
+void _DBG_DestroyMemory(_DBG_Memory *Memory);
+
 // Adds ... onto a string if it is too long
 // String: The string to add ... to
 // MaxLength: The maximum number of characters including the termination \0
@@ -307,7 +312,13 @@ void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End);
 // Returns a pointer to the string
 // List: The list of numbers to print
 // Count: The length of the list
-char *_DBG_PrintList(const uint64_t *List, uint32_t Count);
+char *_DBG_PrintList_uint64(const uint64_t *List, uint32_t Count);
+
+// Turns a list of uint32_t into a string
+// Returns a pointer to the string
+// List: The list of numbers to print
+// Count: The length of the list
+char *_DBG_PrintList_uint32(const uint32_t *List, uint32_t Count);
 
 // Turns a Session struct into a string
 // Returns a pointer to the string
@@ -328,6 +339,11 @@ char *_DBG_PrintStats(const _DBG_Stats *Stats);
 // Returns a pointer to the string
 // Stats: The struct to turn into a string
 char *_DBG_PrintSubStats(const _DBG_SubStats *Stats);
+
+// Turns a Memory struct into a string
+// Returns a pointer to the string
+// Memory: The struct to turn into a string
+char *_DBG_PrintMemory(const _DBG_Memory *Memory);
 
 // Calculates the stats for a list of times
 // Returns nothing
@@ -363,8 +379,13 @@ uint64_t DBG_Init(FILE *ProfileLog, FILE *RunningLog, FILE *ErrorLog, uint64_t F
 // Closes down everything and frees allocated memory
 void DBG_Quit(void);
 
+// Starts a session
+// Return 0 on success and error ID on failure
+// Name: The name of the session started
 uint64_t DBG_StartSession(char *Name);
 
+// Ends the current session
+// Returns 0 on success and error ID on failure
 uint64_t DBG_EndSession(void);
 
 // Functions
@@ -444,6 +465,45 @@ _DBG_Stats *_DBG_CreateStats(uint32_t ID)
     return Stats;
 }
 
+_DBG_Memory *_DBG_CreateMemory(char *Name, void *Pointer, size_t Size)
+{
+    extern _DBG_Session *_DBG_CurrentSession;
+
+    // Get memory
+    _DBG_Memory *Memory = (_DBG_Memory *)malloc(sizeof(_DBG_Memory));
+
+    if (Memory == NULL)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATEMEMORY_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
+        return NULL;
+    }
+
+    Memory->history = (uint32_t *)malloc(sizeof(uint32_t) * _DBG_CurrentSession->depth);
+
+    if (Memory->history == NULL)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATEMEMORY_MALLOC2, strerror(errno), _DBG_ERRORMES_MALLOC);
+        return NULL;
+    }
+
+    // Set values
+    Memory->name = Name;
+    Memory->pointer = Pointer;
+    Memory->size = Size;
+    Memory->depth = _DBG_CurrentSession->depth;
+
+    // Fill in the history
+    _DBG_Session *CurrentSession = _DBG_CurrentSession;
+
+    for (uint32_t *List = Memory->history, *EndList = Memory->history + _DBG_CurrentSession->depth; List < EndList; ++List)
+    {
+        *List = CurrentSession->ID;
+        CurrentSession = CurrentSession->parent;
+    }
+
+    return Memory;
+}
+
 void _DBG_DestroySession(_DBG_Session *Session)
 {
     free(Session);
@@ -467,6 +527,14 @@ void _DBG_DestroyStats(_DBG_Stats *Stats)
     free(Stats);
 }
 
+void _DBG_DestroyMemory(_DBG_Memory *Memory)
+{
+    if (Memory->history != NULL)
+        free(Memory->history);
+
+    free(Memory);
+}
+
 void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End)
 {
     // Get length of end
@@ -481,7 +549,7 @@ void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End)
     sprintf(String + MaxLength - (1 + EndLength), "%s", End);
 }
 
-char *_DBG_PrintList(const uint64_t *List, uint32_t Count)
+char *_DBG_PrintList_uint64(const uint64_t *List, uint32_t Count)
 {
     extern char _DBG_PrintStructString[];
 
@@ -528,13 +596,60 @@ char *_DBG_PrintList(const uint64_t *List, uint32_t Count)
     return _DBG_PrintStructString;
 }
 
+char *_DBG_PrintList_uint32(const uint32_t *List, uint32_t Count)
+{
+    extern char _DBG_PrintStructString[];
+
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "[");
+    char *String = _DBG_PrintStructString + Length;
+    int32_t MaxLength = DBG_PRINTSTRUCT_MAXLENGTH - Length;
+
+    for (const uint32_t *TempList = List, *EndList = List + Count; TempList < EndList; ++TempList)
+    {
+        // Check if there are too many elements
+        if (TempList >= List + DBG_PRINTSTRUCT_LISTMAXLENGTH)
+        {
+            _DBG_PrintTooLong(String, 5, "]");
+            break;
+        }
+
+        // Print the element
+        Length = snprintf(String, MaxLength, "%u, ", *TempList);
+        String += Length;
+        MaxLength -= Length;
+
+        if (MaxLength <= 4)
+        {
+            _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
+            _DBG_SetError(DBG_ERRORID_PRINTLIST_LONG, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 5);
+
+            break;
+        }
+    }
+
+    // Add ending bracket
+    if (Count == 0)
+    {
+        *String = ']';
+        *(String + 1) = '\0';
+    }
+
+    else if (Count <= DBG_PRINTSTRUCT_LISTMAXLENGTH)
+    {
+        *(String - 2) = ']';
+        *(String - 1) = '\0';
+    }
+
+    return _DBG_PrintStructString;
+}
+
 char *_DBG_PrintSession(const _DBG_Session *Session)
 {
     // Print everything to a string
     extern char _DBG_PrintStructString[];
 
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, startTime = %lu, subTime = %lu, removeTime = %lu, child = %lX, parent = %lX, depth = %u}",
-                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, (_DBG_POINTERTOINT)Session->child, (_DBG_POINTERTOINT)Session->parent, Session->depth);
+                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, (uintptr_t)Session->child, (uintptr_t)Session->parent, Session->depth);
 
     // Show if it was too long
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
@@ -554,8 +669,8 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
     char TimeString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
     char OwnTimeString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
 
-    sprintf(TimeString, "%s", _DBG_PrintList(FunctionData->time, FunctionData->count));
-    sprintf(OwnTimeString, "%s", _DBG_PrintList(FunctionData->ownTime, FunctionData->count));
+    sprintf(TimeString, "%s", _DBG_PrintList_uint64(FunctionData->time, FunctionData->count));
+    sprintf(OwnTimeString, "%s", _DBG_PrintList_uint64(FunctionData->ownTime, FunctionData->count));
 
     // Print the struct
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, name = \"%s\", count = %u, time = %s, ownTime = %s}",
@@ -601,7 +716,7 @@ char *_DBG_PrintSubStats(const _DBG_SubStats *Stats)
 
     char ListString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
 
-    sprintf(ListString, "%s", _DBG_PrintList(Stats->list, Stats->count));
+    sprintf(ListString, "%s", _DBG_PrintList_uint64(Stats->list, Stats->count));
 
     // Create the string
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{total = %.*g, avg = %.*g, std = %.*g, min = %.*g, max = %.*g, list = %s}", 
@@ -612,6 +727,29 @@ char *_DBG_PrintSubStats(const _DBG_SubStats *Stats)
     {
         _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
         _DBG_SetError(DBG_ERRORID_PRINTSUBSTATS_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
+    }
+
+    return _DBG_PrintStructString;
+}
+
+char *_DBG_PrintMemory(const _DBG_Memory *Memory)
+{
+    extern char _DBG_PrintStructString[];
+
+    // Get string for history
+    char HistoryString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
+
+    sprintf(HistoryString, "%s", _DBG_PrintList_uint32(Memory->history, Memory->depth));
+
+    // Print everything to a string
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{name = %s, pointer = %p, size = %u, history = %s, depth = %u}",
+                              Memory->name, Memory->pointer, Memory->size, HistoryString, Memory->depth);
+FIX
+    // Show if it was too long
+    if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
+    {
+        _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
+        _DBG_SetError(DBG_ERRORID_PRINTSESSION_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
     }
 
     return _DBG_PrintStructString;
@@ -1352,7 +1490,7 @@ uint64_t DBG_StartSession(char *Name)
     // Create new session struct
     extern _DBG_Session *_DBG_CurrentSession;
     extern _DBG_Session *_DBG_FirstSession;
-    uint32_t Depth = ((_DBG_CurrentSession == NULL) ? (0) : (_DBG_CurrentSession->depth + 1));
+    uint32_t Depth = ((_DBG_CurrentSession == NULL) ? (1) : (_DBG_CurrentSession->depth + 1));
 
     _DBG_Session *NewSession = _DBG_CreateSession(FoundFunction->ID, _DBG_CurrentSession, Depth);
 
@@ -1379,7 +1517,7 @@ uint64_t DBG_StartSession(char *Name)
     extern FILE *_DBG_RunningLog;
 
     if (_DBG_RunningLog != NULL)
-        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_STARTSESSION, 14 + NewSession->depth, StartTime, Name) < 0)
+        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_STARTSESSION, 13 + NewSession->depth, StartTime, Name) < 0)
             _DBG_AddErrorForeign(DBG_ERRORID_STARTSESSION_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
 
     uint64_t EndTime = clock();
@@ -1452,7 +1590,7 @@ uint64_t DBG_EndSession(void)
     extern FILE *_DBG_RunningLog;
 
     if (_DBG_RunningLog != NULL)
-        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_ENDSESSION, 14 + Session->depth, StartTime, _DBG_Functions[Session->ID]->name, TotalTime, OwnTime) < 0)
+        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_ENDSESSION, 13 + Session->depth, StartTime, _DBG_Functions[Session->ID]->name, TotalTime, OwnTime) < 0)
             _DBG_AddErrorForeign(DBG_ERRORID_ENDSESSION_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
 
     // free session
