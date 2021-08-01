@@ -22,7 +22,7 @@ int main(int argc, char **argv)
         printf("Error creating profile log: %s\n\n", strerror(errno));
 
     // DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD | DBG_FLAGS_MIN | DBG_FLAGS_MAX | DBG_FLAGS_LIST;
-    uint64_t Flags = DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD | DBG_FLAGS_MIN | DBG_FLAGS_MAX;
+    uint64_t Flags = DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD | DBG_FLAGS_MIN | DBG_FLAGS_MAX | DBG_SortFlag(DBG_FLAGS_AVG) | DBG_SortFlag(DBG_FLAGS_INVERT);
 
     uint64_t ErrorID = DBG_Init(ProfileLog, NULL, ErrorLog, Flags, 0);
 

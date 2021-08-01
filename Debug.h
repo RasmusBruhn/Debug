@@ -658,15 +658,15 @@ uint64_t _DBG_CreateProfile(void)
         // Find the sorted position and move others to give space
         _DBG_Stats **List;
         
-        for (_DBG_Stats **List = StatsList + Count; List > StatsList; --List)
+        for (List = StatsList + Count; List > StatsList; --List)
         {
-            if ((*(double *)((char *)(List - 1) + _DBG_SortOffset) < *(double *)((char *)NewStats + _DBG_SortOffset)) ^ _DBG_SortInvert)
+            if ((*(double *)((char *)(List - 1) + _DBG_SortOffset) > *(double *)((char *)NewStats + _DBG_SortOffset)) ^ _DBG_SortInvert)
                 *List = *(List - 1);
 
             else
                 break;
         }
-            
+
         // Insert stats
         *List = NewStats;
     }
@@ -720,6 +720,9 @@ uint64_t _DBG_CreateProfile(void)
 
         FirstLine = false;
     }
+
+    for (_DBG_Stats **List = StatsList, **EndList = StatsList + _DBG_FunctionCount - 1; List < EndList; ++List)
+        _DBG_DestroyStats(*List);
 
     return DBG_ERRORID_NOERROR;
 }
