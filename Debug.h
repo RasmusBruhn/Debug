@@ -122,6 +122,7 @@ enum DBG_ErrorID
     DBG_ERRORID_CREATEPROFILE_PRINT2 = 0x100090301,
     DBG_ERRORID_CREATEPROFILE_PRINT3 = 0x100090302,
     DBG_ERRORID_CREATEPROFILE_FUNCTION = 0x100090303,
+    DBG_ERRORID_CREATEPROFILE_MALLOC = 0x100090304,
     DBG_ERRORID_CREATEPROFILEFUNCTIONDATA_TIME1 = 0x100090300,
     DBG_ERRORID_CREATEPROFILEFUNCTIONDATA_TIME2 = 0x100090301,
     DBG_ERRORID_CREATEPROFILEFUNCTIONDATA_TIMESTATS = 0x100090302,
@@ -147,7 +148,8 @@ enum DBG_ErrorID
     DBG_ERRORID_CREATEPROFILESTATS_MAX2 = 0x1000A030E,
     DBG_ERRORID_CREATESTATS_MALLOC = 0x1000B0200,
     DBG_ERRORID_PRINTSTATS_LONG = 0x1000C0100,
-    DBG_ERRORID_PRINTLIST_LONG = 0x1000D0100
+    DBG_ERRORID_PRINTLIST_LONG = 0x1000D0100,
+    DBG_ERRORID_PRINTSUBSTATS_LONG = 0x1000E0100
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory"
@@ -212,6 +214,9 @@ enum DBG_Flags
 #define _DBG_STANDARD_SORTOFFSET (_DBG_STANDARD_SORTOFFSET_TYPE + _DBG_STANDARD_SORTOFFSET_STATS)
 #define _DBG_STANDARD_SORTINVERT false
 
+// For printing pointers
+#define _DBG_POINTERTOINT uint32_t
+
 // global variables
 // The outer most session, NULL if no session has been started
 _DBG_Session *_DBG_FirstSession = NULL;
@@ -258,7 +263,7 @@ _DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, char *Name);
 // Allocates memory for and initialises a Stats struct
 // Returns a pointer to the struct, NULL on error
 // ID: The ID of the function these stats belong to
-_DBG_Stats *_DBG_CreateStats(ID);
+_DBG_Stats *_DBG_CreateStats(uint32_t ID);
 
 // Frees a Session struct and all memory allocated for it
 // Session: The struct to free
@@ -276,7 +281,7 @@ void _DBG_DestroyStats(_DBG_Stats *Stats);
 // String: The string to add ... to
 // MaxLength: The maximum number of characters including the termination \0
 // End: A string to append to the end after ...
-void *_DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End);
+void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End);
 
 // Turns a list of uint64_t into a string
 // Returns a pointer to the string
@@ -396,7 +401,7 @@ _DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, char *Name)
     return FunctionData;
 }
 
-_DBG_Stats *_DBG_CreateStats(ID)
+_DBG_Stats *_DBG_CreateStats(uint32_t ID)
 {
     extern _DBG_FunctionData **_DBG_Functions;
 
@@ -442,7 +447,7 @@ void _DBG_DestroyStats(_DBG_Stats *Stats)
     free(Stats);
 }
 
-void *_DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End)
+void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End)
 {
     // Get length of end
     uint32_t EndLength = strlen(End);
@@ -453,7 +458,7 @@ void *_DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End)
     String[MaxLength - (2 + EndLength)] = '.';
 
     // Add the end
-    sprintf(String - (1 + EndLength), "%s", End);
+    sprintf(String + MaxLength - (1 + EndLength), "%s", End);
 }
 
 char *_DBG_PrintList(const uint64_t *List, uint32_t Count)
@@ -464,17 +469,12 @@ char *_DBG_PrintList(const uint64_t *List, uint32_t Count)
     char *String = _DBG_PrintStructString + Length;
     int32_t MaxLength = DBG_PRINTSTRUCT_MAXLENGTH - Length;
 
-    for (uint64_t *TempList = List, *EndList = List + Count; TempList < EndList; ++List)
+    for (const uint64_t *TempList = List, *EndList = List + Count; TempList < EndList; ++TempList)
     {
         // Check if there are too many elements
         if (TempList >= List + DBG_PRINTSTRUCT_LISTMAXLENGTH)
         {
-            *String = '.';
-            *(String + 1) = '.';
-            *(String + 2) = '.';
-
-            String += 5;
-
+            _DBG_PrintTooLong(String, 5, "]");
             break;
         }
 
@@ -485,12 +485,7 @@ char *_DBG_PrintList(const uint64_t *List, uint32_t Count)
 
         if (MaxLength <= 4)
         {
-            _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 3] = '.';
-            _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
-            _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 5] = '.';
-
-            String = _DBG_PrintStructString + DBG_PRINTSTRUCT_MAXLENGTH;
-
+            _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
             _DBG_SetError(DBG_ERRORID_PRINTLIST_LONG, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 5);
 
             break;
@@ -504,11 +499,13 @@ char *_DBG_PrintList(const uint64_t *List, uint32_t Count)
         *(String + 1) = '\0';
     }
 
-    else
+    else if (Count <= DBG_PRINTSTRUCT_LISTMAXLENGTH)
     {
         *(String - 2) = ']';
         *(String - 1) = '\0';
     }
+
+    return _DBG_PrintStructString;
 }
 
 char *_DBG_PrintSession(const _DBG_Session *Session)
@@ -517,16 +514,12 @@ char *_DBG_PrintSession(const _DBG_Session *Session)
     extern char _DBG_PrintStructString[];
 
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, startTime = %lu, subTime = %lu, removeTime = %lu, child = %lX, parent = %lX, depth = %u}",
-                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, (uint64_t)Session->child, (uint64_t)Session->parent, Session->depth);
+                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, (_DBG_POINTERTOINT)Session->child, (_DBG_POINTERTOINT)Session->parent, Session->depth);
 
     // Show if it was too long
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
     {
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 2] = '}';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 3] = '.';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 5] = '.';
-
+        _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
         _DBG_SetError(DBG_ERRORID_PRINTSESSION_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
     }
 
@@ -550,11 +543,7 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
 
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
     {
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 2] = '}';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 3] = '.';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 5] = '.';
-
+        _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
         _DBG_SetError(DBG_ERRORID_PRINTFUNCTIONDATA_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
     }
 
@@ -573,16 +562,12 @@ char *_DBG_PrintStats(const _DBG_Stats *Stats)
     sprintf(OwnTimeString, "%s", _DBG_PrintSubStats(&Stats->ownTime));
 
     // Create the string
-    int32_t Length = snprintf(_DBG_PrintStructString, "{ID = %u, time = %s, ownTime = %s}", Stats->ID, TimeString, OwnTimeString);
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, time = %s, ownTime = %s}", Stats->ID, TimeString, OwnTimeString);
     
     // Show if it was too long
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
     {
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 2] = '}';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 3] = '.';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 4] = '.';
-        _DBG_PrintStructString[DBG_PRINTSTRUCT_MAXLENGTH - 5] = '.';
-
+        _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
         _DBG_SetError(DBG_ERRORID_PRINTSTATS_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
     }
 
@@ -592,12 +577,24 @@ char *_DBG_PrintStats(const _DBG_Stats *Stats)
 char *_DBG_PrintSubStats(const _DBG_SubStats *Stats)
 {
     extern char _DBG_PrintStructString[];
+    extern uint32_t _DBG_Precision;
 
     char ListString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
 
     sprintf(ListString, "%s", _DBG_PrintList(Stats->list, Stats->count));
 
+    // Create the string
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{total = %.*g, avg = %.*g, std = %.*g, min = %.*g, max = %.*g, list = %s}", 
+                                                      _DBG_Precision, Stats->total, _DBG_Precision, Stats->avg, _DBG_Precision, Stats->std, _DBG_Precision, Stats->min, _DBG_Precision, Stats->max, ListString);
+    
+    // Show if it was too long
+    if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
+    {
+        _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
+        _DBG_SetError(DBG_ERRORID_PRINTSUBSTATS_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
+    }
 
+    return _DBG_PrintStructString;
 }
 
 void _DBG_CalcStats(_DBG_SubStats *Stats, uint64_t *List, uint32_t Count)
@@ -629,7 +626,7 @@ void _DBG_CalcStats(_DBG_SubStats *Stats, uint64_t *List, uint32_t Count)
     Stats->list = List;
     Stats->count = Count;
 
-    printf("%s\n", _DBG_Pri);
+    //printf("%s\n", _DBG_Pri);
 }
 
 uint64_t _DBG_CreateProfile(void)
@@ -641,22 +638,29 @@ uint64_t _DBG_CreateProfile(void)
     extern uint32_t _DBG_SortOffset;
 
     // Calculate all the stats and sort functions
-    _DBG_Stats StatsDataList[_DBG_FunctionCount - 1];
     _DBG_Stats *StatsList[_DBG_FunctionCount - 1];
 
     for (uint32_t Count = 0; Count < _DBG_FunctionCount - 1; ++Count)
     {
         // Calculate the stats
-        _DBG_CalcStats(&StatsDataList[Count].time, _DBG_Functions[Count + 1]->time, _DBG_Functions[Count]->count);
-        _DBG_CalcStats(&StatsDataList[Count].ownTime, _DBG_Functions[Count + 1]->ownTime, _DBG_Functions[Count]->count);
-        StatsDataList[Count].ID = Count + 1;
+        _DBG_Stats *NewStats = _DBG_CreateStats(Count + 1);
+
+        if (NewStats == NULL)
+        {
+            _DBG_AddError(DBG_ERRORID_CREATEPROFILE_MALLOC, _DBG_ERRORMES_MALLOC);
+
+            for (_DBG_Stats **List = StatsList, **EndList = StatsList + Count; List < EndList; ++List)
+                _DBG_DestroyStats(*List);
+
+            return DBG_ERRORID_CREATEPROFILE_MALLOC;
+        }
 
         // Find the sorted position and move others to give space
         _DBG_Stats **List;
         
-        for (List = StatsList + Count; List > StatsList; --List)
+        for (_DBG_Stats **List = StatsList + Count; List > StatsList; --List)
         {
-            if ((*(double *)((char *)(List - 1) + _DBG_SortOffset) < *(double *)((char *)(StatsDataList + Count) + _DBG_SortOffset)) ^ _DBG_SortInvert)
+            if ((*(double *)((char *)(List - 1) + _DBG_SortOffset) < *(double *)((char *)NewStats + _DBG_SortOffset)) ^ _DBG_SortInvert)
                 *List = *(List - 1);
 
             else
@@ -664,7 +668,7 @@ uint64_t _DBG_CreateProfile(void)
         }
             
         // Insert stats
-        *List = StatsDataList + Count;
+        *List = NewStats;
     }
 
     // Loop through all the functions

@@ -7,12 +7,12 @@
 int main(int argc, char **argv)
 {
     // Setup error log
-    FILE *ErrorLog = fopen("c/Debug/DebugErrorLog.txt", "w+");
+    FILE *ErrorLog = fopen("DebugErrorLog.txt", "w+");
 
     if (ErrorLog == NULL)
         printf("Error creating log: %s\n", strerror(errno));
     
-    FILE *ProfileLog = fopen("c/Debug/DebugProfileLog.txt", "w");
+    FILE *ProfileLog = fopen("DebugProfileLog.txt", "w");
 
     if (ProfileLog == NULL)
         printf("Error creating profile log: %s\n\n", strerror(errno));
@@ -23,7 +23,7 @@ int main(int argc, char **argv)
     _DBG_Session *TestSession = _DBG_CreateSession(25, (_DBG_Session *)0xFFFFFFFF, 3);
 
     // Print pointer
-    printf("Session pointer: %lX\n", (uint64_t)TestSession);
+    printf("Session pointer: %lX\n", (_DBG_POINTERTOINT)TestSession);
 
     // Print it to make sure it was created correctly, cannot test too long message because it is impossible
     printf("Session: %s\n\n", _DBG_PrintSession(TestSession));
@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     _DBG_FunctionData *TestFunctionData = _DBG_CreateFunctionData(13, "NameOfFunction");
 
     // Print pointer
-    printf("Function data pointer: %lX\n", (uint64_t)TestFunctionData);
+    printf("Function data pointer: %lX\n", (_DBG_POINTERTOINT)TestFunctionData);
 
     // Print data
     printf("Function data: %s\n\n", _DBG_PrintFunctionData(TestFunctionData));
@@ -58,6 +58,20 @@ int main(int argc, char **argv)
     TestFunctionData->ownTime[4] = 40;
 
     printf("Function data with time lists: %s\n\n", _DBG_PrintFunctionData(TestFunctionData));
+
+    // Test stats creation
+    extern _DBG_FunctionData **_DBG_Functions;
+    _DBG_Functions = (_DBG_FunctionData **)realloc(_DBG_Functions, sizeof(_DBG_FunctionData *) * 2);
+    _DBG_Functions[1] = TestFunctionData;
+
+    _DBG_Stats *TestStats = _DBG_CreateStats(1);
+
+    // Print pointer
+    printf("Session pointer: %lX\n", (_DBG_POINTERTOINT)TestStats);
+
+    // Print it to make sure it was created correctly, cannot test too long message because it is impossible
+    printf("Stats: %s\n\n", _DBG_PrintStats(TestStats));
+
 
     // Too long time list
     TestFunctionData->count = 6;
