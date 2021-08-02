@@ -162,7 +162,8 @@ enum DBG_ErrorID
     DBG_ERRORID_PRINTLIST_LONG = 0x1000D0100,
     DBG_ERRORID_PRINTSUBSTATS_LONG = 0x1000E0100,
     DBG_ERRORID_CREATEMEMORY_MALLOC = 0x1000F0200,
-    DBG_ERRORID_CREATEMEMORY_MALLOC2 = 0x1000F0201
+    DBG_ERRORID_CREATEMEMORY_MALLOC2 = 0x1000F0201,
+    DBG_ERRORID_PRINTMEMORY_LONG = 0x10010100
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory"
@@ -648,8 +649,8 @@ char *_DBG_PrintSession(const _DBG_Session *Session)
     // Print everything to a string
     extern char _DBG_PrintStructString[];
 
-    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, startTime = %lu, subTime = %lu, removeTime = %lu, child = %lX, parent = %lX, depth = %u}",
-                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, (uintptr_t)Session->child, (uintptr_t)Session->parent, Session->depth);
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, startTime = %lu, subTime = %lu, removeTime = %lu, child = %p, parent = %p, depth = %u}",
+                                                                                   Session->ID, Session->startTime, Session->subTime, Session->removeTime, Session->child, Session->parent, Session->depth);
 
     // Show if it was too long
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
@@ -744,12 +745,12 @@ char *_DBG_PrintMemory(const _DBG_Memory *Memory)
     // Print everything to a string
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{name = %s, pointer = %p, size = %u, history = %s, depth = %u}",
                               Memory->name, Memory->pointer, Memory->size, HistoryString, Memory->depth);
-FIX
+
     // Show if it was too long
     if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
     {
         _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
-        _DBG_SetError(DBG_ERRORID_PRINTSESSION_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
+        _DBG_SetError(DBG_ERRORID_PRINTMEMORY_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
     }
 
     return _DBG_PrintStructString;

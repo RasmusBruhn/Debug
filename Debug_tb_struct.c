@@ -23,7 +23,7 @@ int main(int argc, char **argv)
     _DBG_Session *TestSession = _DBG_CreateSession(25, (_DBG_Session *)0xFFFFFFFF, 3);
 
     // Print pointer
-    printf("Session pointer: %lX\n", (_DBG_POINTERTOINT)TestSession);
+    printf("Session pointer: %p\n", TestSession);
 
     // Print it to make sure it was created correctly, cannot test too long message because it is impossible
     printf("Session: %s\n\n", _DBG_PrintSession(TestSession));
@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     _DBG_FunctionData *TestFunctionData = _DBG_CreateFunctionData(13, "NameOfFunction");
 
     // Print pointer
-    printf("Function data pointer: %lX\n", (_DBG_POINTERTOINT)TestFunctionData);
+    printf("Function data pointer: %p\n", TestFunctionData);
 
     // Print data
     printf("Function data: %s\n\n", _DBG_PrintFunctionData(TestFunctionData));
@@ -67,11 +67,43 @@ int main(int argc, char **argv)
     _DBG_Stats *TestStats = _DBG_CreateStats(1);
 
     // Print pointer
-    printf("Session pointer: %lX\n", (_DBG_POINTERTOINT)TestStats);
+    printf("Session pointer: %p\n", TestStats);
 
     // Print it to make sure it was created correctly, cannot test too long message because it is impossible
     printf("Stats: %s\n\n", _DBG_PrintStats(TestStats));
 
+
+    // Test memory struct
+    _DBG_Session *Session1 = _DBG_CreateSession(0, NULL, 1);
+    _DBG_Session *Session2 = _DBG_CreateSession(1, Session1, 2);
+    _DBG_Session *Session3 = _DBG_CreateSession(2, Session2, 3);
+    _DBG_Session *Session4 = _DBG_CreateSession(3, Session3, 4);
+    _DBG_Session *Session5 = _DBG_CreateSession(4, Session4, 5);
+    _DBG_Session *Session6 = _DBG_CreateSession(5, Session5, 6);
+
+    _DBG_CurrentSession = Session3;
+
+    size_t Size = 10;
+    char Memory[Size];
+    _DBG_Memory *TestMemory = _DBG_CreateMemory("Memory", Memory, Size);
+
+    _DBG_CurrentSession = Session6;
+    _DBG_Memory *TestMemory2 = _DBG_CreateMemory("Memory", Memory, Size);
+
+    printf("Size: %lu, Pointer: %p\n", Size, Memory);
+    printf("Memory: %s\n", _DBG_PrintMemory(TestMemory));
+    printf("Long Memory: %s\n\n", _DBG_PrintMemory(TestMemory2));
+
+    // Clean up
+    _DBG_DestroyMemory(TestMemory);
+    _DBG_DestroyMemory(TestMemory2);
+    _DBG_CurrentSession = NULL;
+    _DBG_DestroySession(Session1);
+    _DBG_DestroySession(Session2);
+    _DBG_DestroySession(Session3);
+    _DBG_DestroySession(Session4);
+    _DBG_DestroySession(Session5);
+    _DBG_DestroySession(Session6);
 
     // Too long time list
     TestFunctionData->count = 6;
