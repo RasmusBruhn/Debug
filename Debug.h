@@ -115,6 +115,11 @@ enum DBG_ErrorID
     DBG_ERRORID_QUIT_NULL = 0x100020101,
     DBG_ERRORID_QUIT_SESSION = 0x100020102,
     DBG_ERRORID_QUIT_PROFILE = 0x100020303,
+    DBG_ERRORID_QUIT_RUNNINGLOG = 0x100020304,
+    DBG_ERRORID_QUIT_PROFILELOG1 = 0x100020305,
+    DBG_ERRORID_QUIT_PROFILELOG2 = 0x100020306,
+    DBG_ERRORID_QUIT_PROFILELOG3 = 0x100020307,
+    DBG_ERRORID_QUIT_PROFILELOG4 = 0x100020308,
     DBG_ERRORID_CREATESESSION_MALLOC = 0x100030200,
     DBG_ERRORID_CREATEFUNCTIONDATA_MALLOC = 0x100040200,
     DBG_ERRORID_PRINTSESSION_LONG = 0x100050100,
@@ -163,11 +168,14 @@ enum DBG_ErrorID
     DBG_ERRORID_PRINTSUBSTATS_LONG = 0x1000E0100,
     DBG_ERRORID_CREATEMEMORY_MALLOC = 0x1000F0200,
     DBG_ERRORID_CREATEMEMORY_MALLOC2 = 0x1000F0201,
-    DBG_ERRORID_PRINTMEMORY_LONG = 0x10010100
+    DBG_ERRORID_PRINTMEMORY_LONG = 0x10010100,
+    DBG_ERRORID_MALLOC_MEMORY = 0x10011200,
+    DBG_ERRORID_MALLOC_TRACKER = 0x10011301,
+    DBG_ERRORID_MALLOC_REALLOC = 0x10011302
 };
 
-#define _DBG_ERRORMES_MALLOC "Unable to allocate memory"
-#define _DBG_ERRORMES_REALLOC "Unable to reallocate memory"
+#define _DBG_ERRORMES_MALLOC "Unable to allocate memory: \"%s\""
+#define _DBG_ERRORMES_REALLOC "Unable to reallocate memory: \"%s\""
 #define _DBG_ERRORMES_NOINIT "Debugging has not been initialised"
 #define _DBG_ERRORMES_FOUNDNULL "Found a stray NULL pointer in %s"
 #define _DBG_ERRORMES_ALREADYINIT "Debugging has already been initialised"
@@ -212,6 +220,7 @@ enum DBG_Flags
 // Running log messages
 #define _DBG_RUNNINGLOG_STARTSESSION "%*.lu: Started session \"%s\"\n"
 #define _DBG_RUNNINGLOG_ENDSESSION "%*.lu: Ended session   \"%s\", TotalTime = %lu, OwnTime = %lu\n"
+#define _DBG_RUNNINGLOG_MEMORYLEAK "%*.lu: Memory leak %s\n"
 
 // struct print max length
 #define DBG_PRINTSTRUCT_MAXLENGTH 1000
@@ -389,6 +398,23 @@ uint64_t DBG_StartSession(char *Name);
 // Returns 0 on success and error ID on failure
 uint64_t DBG_EndSession(void);
 
+// Allocates new memory which is tracked
+// Returns a pointer to the allocated memort, NULL on error
+// Size: The number of bytes to be allocated
+// Name: The name of the memory, does not have to be unique and can be NULL
+void *DBG_Malloc(size_t Size, char *Name);
+
+// Reallocates memory
+// Returns the new pointer, NULL on error
+// Pointer: The pointer to the old memory
+// Size: The size of the new memory
+void *DBG_Realloc(void *Pointer, size_t Size);
+
+// Frees some memory and stops the tracking
+// Returns nothing
+// Pointer: The pointer to the allocated memory
+void DBG_Free(void *Pointer);
+
 // Functions
 void DBG_ExitFunc(uint64_t ErrorID)
 {
@@ -403,7 +429,7 @@ _DBG_Session *_DBG_CreateSession(uint32_t ID, _DBG_Session *Parent, uint32_t Dep
 
     if (Session == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_CREATESESSION_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATESESSION_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC, "Session");
         return NULL;
     }
  
@@ -428,7 +454,7 @@ _DBG_FunctionData *_DBG_CreateFunctionData(uint32_t ID, char *Name)
 
     if (FunctionData == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_CREATEFUNCTIONDATA_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATEFUNCTIONDATA_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC, "FunctionData");
         return NULL;
     }
 
@@ -452,7 +478,7 @@ _DBG_Stats *_DBG_CreateStats(uint32_t ID)
 
     if (Stats == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_CREATESTATS_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATESTATS_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC, "Stats");
         return NULL;
     }
 
@@ -475,7 +501,7 @@ _DBG_Memory *_DBG_CreateMemory(char *Name, void *Pointer, size_t Size)
 
     if (Memory == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_CREATEMEMORY_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATEMEMORY_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC, "Memory");
         return NULL;
     }
 
@@ -483,7 +509,7 @@ _DBG_Memory *_DBG_CreateMemory(char *Name, void *Pointer, size_t Size)
 
     if (Memory->history == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_CREATEMEMORY_MALLOC2, strerror(errno), _DBG_ERRORMES_MALLOC);
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATEMEMORY_MALLOC2, strerror(errno), _DBG_ERRORMES_MALLOC, "Memory->history");
         return NULL;
     }
 
@@ -806,7 +832,7 @@ uint64_t _DBG_CreateProfile(void)
 
         if (NewStats == NULL)
         {
-            _DBG_AddError(DBG_ERRORID_CREATEPROFILE_MALLOC, _DBG_ERRORMES_MALLOC);
+            _DBG_AddError(DBG_ERRORID_CREATEPROFILE_MALLOC, _DBG_ERRORMES_MALLOC, "NewStats");
 
             for (_DBG_Stats **List = StatsList, **EndList = StatsList + Count; List < EndList; ++List)
                 _DBG_DestroyStats(*List);
@@ -1260,7 +1286,7 @@ uint64_t DBG_Init(FILE *ProfileLog, FILE *RunningLog, FILE *ErrorLog, uint64_t F
     
     if (_DBG_Functions == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_INIT_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC);
+        _DBG_AddErrorForeign(DBG_ERRORID_INIT_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC, "_DBG_Functions");
 
         return DBG_ERRORID_INIT_MALLOC;
     }
@@ -1393,14 +1419,35 @@ void DBG_Quit(void)
     // Free the functions list
     free(_DBG_Functions);
 
-    // Check if there are memory leaks
-
     // Free memory list
     if (_DBG_MemoryList != NULL)
     {
-        for (_DBG_Memory **List = _DBG_MemoryList, **EndList = _DBG_MemoryList + _DBG_MemoryCount; List < EndList; ++List)
-            _DBG_DestroyMemory(*List);
+        if (fprintf(_DBG_ProfileLog, "\n\nMemory leaks: [\n") < 0)
+            _DBG_AddErrorForeign(DBG_ERRORID_QUIT_PROFILELOG1, _DBG_ERRORMES_WRITEFILE, "ProfileLog");
 
+        // Print the memory leaks
+        for (_DBG_Memory **List = _DBG_MemoryList, **EndList = _DBG_MemoryList + _DBG_MemoryCount; List < EndList; ++List)
+        {
+            // Write to running log
+            if (_DBG_RunningLog != NULL)
+                if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_MEMORYLEAK, 13, _DBG_PrintMemory(*List)) < 0)
+                    _DBG_AddErrorForeign(DBG_ERRORID_QUIT_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
+
+            // Write to profile log
+            if (fprintf(_DBG_ProfileLog, "%s", _DBG_PrintMemory(*List)) < 0)
+                _DBG_AddErrorForeign(DBG_ERRORID_QUIT_PROFILELOG2, _DBG_ERRORMES_WRITEFILE, "ProfileLog");
+
+            if (List < EndList - 1)
+                if (fprintf(_DBG_ProfileLog, ",\n") < 0)
+                    _DBG_AddErrorForeign(DBG_ERRORID_QUIT_PROFILELOG3, _DBG_ERRORMES_WRITEFILE, "ProfileLog");
+
+            _DBG_DestroyMemory(*List);
+        }
+        
+        if (fprintf(_DBG_ProfileLog, "\n]") < 0)
+            _DBG_AddErrorForeign(DBG_ERRORID_QUIT_PROFILELOG4, _DBG_ERRORMES_WRITEFILE, "ProfileLog");
+
+        
         free(_DBG_MemoryList);
     }
 
@@ -1469,7 +1516,7 @@ uint64_t DBG_StartSession(char *Name)
 
         if (FoundFunction == NULL)
         {
-            _DBG_AddError(DBG_ERRORID_STARTSESSION_CREATEFUNCTION, _DBG_ERRORMES_CREATESTRUCT, "FunctionData");
+            _DBG_AddError(DBG_ERRORID_STARTSESSION_CREATEFUNCTION, _DBG_ERRORMES_CREATESTRUCT, "_DBG_FunctionData");
 
             return DBG_ERRORID_STARTSESSION_CREATEFUNCTION;
         }
@@ -1478,7 +1525,7 @@ uint64_t DBG_StartSession(char *Name)
 
         if (NewFunctionList == NULL)
         {
-            _DBG_AddErrorForeign(DBG_ERRORID_STARTSESSION_REALLOC, strerror(errno), _DBG_ERRORMES_REALLOC);
+            _DBG_AddErrorForeign(DBG_ERRORID_STARTSESSION_REALLOC, strerror(errno), _DBG_ERRORMES_REALLOC, "_DBG_Functions");
 
             return DBG_ERRORID_STARTSESSION_REALLOC;
         }
@@ -1497,8 +1544,7 @@ uint64_t DBG_StartSession(char *Name)
 
     if (NewSession == NULL)
     {
-        _DBG_AddError(DBG_ERRORID_STARTSESSION_CREATESESSION, _DBG_ERRORMES_CREATESTRUCT, "Session");
-
+        _DBG_AddError(DBG_ERRORID_STARTSESSION_CREATESESSION, _DBG_ERRORMES_CREATESTRUCT, "_DBG_Session");
         return DBG_ERRORID_STARTSESSION_CREATESESSION;
     }
     
@@ -1562,7 +1608,7 @@ uint64_t DBG_EndSession(void)
 
     if (NewTime == NULL || NewOwnTime == NULL)
     {
-        _DBG_AddErrorForeign(DBG_ERRORID_ENDSESSION_REALLOC, strerror(errno), _DBG_ERRORMES_REALLOC);
+        _DBG_AddErrorForeign(DBG_ERRORID_ENDSESSION_REALLOC, strerror(errno), _DBG_ERRORMES_REALLOC, "_DBG_Functions[]->time/ownTime");
         return DBG_ERRORID_ENDSESSION_REALLOC;
     }
 
@@ -1604,6 +1650,65 @@ uint64_t DBG_EndSession(void)
         _DBG_CurrentSession->removeTime += EndTime - StartTime;
 
     return DBG_ERRORID_NOERROR;
+}
+
+void *DBG_Malloc(size_t Size, char *Name)
+{
+    extern _DBG_Memory **_DBG_MemoryList;
+    extern uint32_t _DBG_MemoryCount;
+
+    // Allocate memory
+    void *Memory = malloc(Size);
+
+    if (Memory == NULL)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_MALLOC_MEMORY, strerror(errno), _DBG_ERRORMES_MALLOC, "Memory");
+        return NULL;
+    }
+
+    // Setup tracking
+    _DBG_Memory *Tracker = _DBG_CreateMemory(Name, Memory, Size);
+
+    if (Tracker == NULL)
+    {
+        free(Memory);
+        _DBG_AddError(DBG_ERRORID_MALLOC_TRACKER, _DBG_ERRORMES_CREATESTRUCT, "_DBG_Memory");
+        return NULL;
+    }
+
+    // Add tracking to list
+    _DBG_Memory **NewMemoryList = (_DBG_Memory **)realloc(_DBG_MemoryList, _DBG_MemoryCount + 1);
+
+    if (NewMemoryList == NULL)
+    {
+        free(Memory);
+        free(Tracker);
+        _DBG_AddErrorForeign(DBG_ERRORID_MALLOC_REALLOC, strerror(errno), _DBG_ERRORMES_REALLOC, "_DBG_MemoryList");
+        return NULL;
+    }
+
+    _DBG_MemoryList = NewMemoryList;
+
+    // Insert the new tracker
+    _DBG_Memory **List = NULL;
+
+    for (List = _DBG_MemoryList + _DBG_MemoryCount++; List > _DBG_MemoryList; --List)
+        if ((*(List - 1))->pointer < Memory)
+            break;
+
+    *List = Tracker;
+
+    return Memory;
+}ADD LOGGING AND UPDATE OWNTIME FOR CURRENT FUNCTION
+
+void *DBG_Realloc(void *Pointer, size_t Size)
+{
+
+}
+
+void DBG_Free(void *Pointer)
+{
+
 }
 
 #endif
