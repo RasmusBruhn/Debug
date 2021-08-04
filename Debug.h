@@ -172,7 +172,13 @@ enum DBG_ErrorID
     DBG_ERRORID_MALLOC_MEMORY = 0x10011200,
     DBG_ERRORID_MALLOC_TRACKER = 0x10011301,
     DBG_ERRORID_MALLOC_REALLOC = 0x10011302,
-    DBG_ERRORID_MALLOC_RUNNINGLOG = 0x10011303
+    DBG_ERRORID_MALLOC_RUNNINGLOG = 0x10011303,
+    DBG_ERRORID_REALLOC_POINTER = 0x100012200,
+    DBG_ERRORID_REALLOC_REALLOC = 0x100012201,
+    DBG_ERRORID_REALLOC_RUNNINGLOG = 0x100012302,
+    DBG_ERRORID_FREE_POINTER = 0x100013100,
+    DBG_ERRORID_FREE_REALLOC = 0x100013301,
+    DBG_ERRORID_FREE_RUNNINGLOG = 0x100013302
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory: \"%s\""
@@ -187,6 +193,7 @@ enum DBG_ErrorID
 #define _DBG_ERRORMES_NOOPENSESSION "Attempting to close session with no open sessions"
 #define _DBG_ERRORMES_WRITEFILE "Unable to write to the \"%s\" file"
 #define _DBG_ERRORMES_WHILEWRITING "An error occured while writing %s"
+#define _DBG_ERRORMES_UNKNOWNPOINTER "The pointer %p has not been allocated and cannot be %s"
 
 // Flags
 enum DBG_Flags
@@ -412,12 +419,17 @@ void *DBG_Malloc(size_t Size, char *Name);
 // Returns the new pointer, NULL on error
 // Pointer: The pointer to the old memory
 // Size: The size of the new memory
-void *DBG_Realloc(void *Pointer, size_t Size);
+void *DBG_Realloc(void *Pointer, size_t Size, char *Name);
 
 // Frees some memory and stops the tracking
 // Returns nothing
 // Pointer: The pointer to the allocated memory
 void DBG_Free(void *Pointer);
+
+// Finds the pointer in the memory list
+// Returns the point in the memory list where the pointer is, NULL if it does not exist
+// Pointer: The pointer to find
+_DBG_Memory **_DBG_FindPointer(void *Pointer);
 
 // Functions
 void DBG_ExitFunc(uint64_t ErrorID)
@@ -1663,8 +1675,8 @@ void *DBG_Malloc(size_t Size, char *Name)
     extern _DBG_Session *_DBG_CurrentSession;
     extern FILE *_DBG_RunningLog;
 
-    // Get time
-    uint64_t StartTime = clock();
+    if (Size == 0)
+        return NULL;
 
     // Allocate memory
     void *Memory = malloc(Size);
@@ -1674,6 +1686,9 @@ void *DBG_Malloc(size_t Size, char *Name)
         _DBG_AddErrorForeign(DBG_ERRORID_MALLOC_MEMORY, strerror(errno), _DBG_ERRORMES_MALLOC, "Memory");
         return NULL;
     }
+
+    // Get time
+    uint64_t StartTime = clock();
 
     // Setup tracking
     _DBG_Memory *Tracker = _DBG_CreateMemory(Name, Memory, Size);
@@ -1686,7 +1701,7 @@ void *DBG_Malloc(size_t Size, char *Name)
     }
 
     // Add tracking to list
-    _DBG_Memory **NewMemoryList = (_DBG_Memory **)realloc(_DBG_MemoryList, _DBG_MemoryCount + 1);
+    _DBG_Memory **NewMemoryList = (_DBG_Memory **)realloc(_DBG_MemoryList, sizeof(_DBG_Memory *) * (_DBG_MemoryCount + 1));
 
     if (NewMemoryList == NULL)
     {
@@ -1720,14 +1735,165 @@ void *DBG_Malloc(size_t Size, char *Name)
     return Memory;
 }
 
-void *DBG_Realloc(void *Pointer, size_t Size)
+void *DBG_Realloc(void *Pointer, size_t Size, char *Name)
 {
+    // Take care of special cases
+    if (Pointer == NULL)
+        return DBG_Malloc(Size, Name);
 
+    if (Size == 0)
+    {
+        DBG_Free(Pointer);
+        return NULL;
+    }
+
+    // Find the pointer in the memory list
+    _DBG_Memory **MemoryPoint = _DBG_FindPointer(Pointer);
+
+    // Test if it exists
+    if (MemoryPoint == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_REALLOC_POINTER, _DBG_ERRORMES_UNKNOWNPOINTER, Pointer, "reallocated");
+        return NULL;
+    }
+
+    // Reallocate memory
+    void *NewPointer = realloc(Pointer, Size);
+
+    if (NewPointer == NULL)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_REALLOC_REALLOC, strerror(errno), _DBG_ERRORMES_REALLOC, "NewPointer");
+        return NULL;
+    }
+
+    uint64_t StartTime = clock();
+
+    // Update memory information
+    _DBG_Memory *Memory = *MemoryPoint;
+    uint32_t OldSize = Memory->size;
+
+    if (Name != NULL)
+        Memory->name = Name;
+
+    Memory->pointer = NewPointer;
+    Memory->size = Size;
+
+    // Move to new location
+    extern _DBG_Memory **_DBG_MemoryList;
+    extern uint32_t _DBG_MemoryCount;
+
+    _DBG_Memory **List = MemoryPoint;
+
+    if (NewPointer > Pointer)
+        for (_DBG_Memory **EndList = _DBG_MemoryList + _DBG_MemoryCount - 1; List < EndList; ++List)
+        {
+            if (NewPointer < (*(List + 1))->pointer)
+                break;
+
+            *List = *(List + 1);
+        }
+
+    else
+        for (; List > _DBG_MemoryList; --List)
+        {
+            if (NewPointer > (*(List - 1))->pointer)
+                break;
+
+            *List = *(List - 1);
+        }
+
+    *List = Memory;
+
+    // Print to log
+    extern _DBG_Session *_DBG_CurrentSession;
+    extern FILE *_DBG_RunningLog;
+
+    if (_DBG_RunningLog != NULL)
+        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_REALLOC, 14 + _DBG_CurrentSession->depth, StartTime, Memory->name, Pointer, NewPointer, OldSize, Size) < 0)
+            _DBG_AddErrorForeign(DBG_ERRORID_REALLOC_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
+
+    // Add to remove time
+    uint64_t EndTime = clock();
+    _DBG_CurrentSession->removeTime += EndTime - StartTime;
+
+    return NewPointer;
 }
 
 void DBG_Free(void *Pointer)
 {
+    // Get time
+    uint64_t StartTime = clock();
 
+    // Free the memory
+    free(Pointer);
+
+    _DBG_Memory **List = _DBG_FindPointer(Pointer);
+
+    if (List == NULL)
+    {
+        _DBG_SetError(DBG_ERRORID_FREE_POINTER, _DBG_ERRORMES_UNKNOWNPOINTER, Pointer, "freed");
+        return;
+    }
+
+    // Print to log
+    extern _DBG_Session *_DBG_CurrentSession;
+    extern FILE *_DBG_RunningLog;
+
+    if (_DBG_RunningLog != NULL)
+        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_FREE, 14 + _DBG_CurrentSession->depth, StartTime, (*List)->name, (*List)->pointer) < 0)
+            _DBG_AddErrorForeign(DBG_ERRORID_FREE_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
+
+    // Free the memory used
+    free(*List);
+
+    // Move memory list down
+    extern _DBG_Memory **_DBG_MemoryList;
+    extern uint32_t _DBG_MemoryCount;
+
+    for (_DBG_Memory **EndList = _DBG_MemoryList + _DBG_MemoryCount - 1; List < EndList; ++List)
+        *List = *(List + 1);
+
+    // Resize memory list
+    _DBG_Memory **NewMemoryList = (_DBG_Memory **)realloc(_DBG_MemoryList, sizeof(_DBG_Memory *) * --_DBG_MemoryCount);
+
+    if (NewMemoryList == NULL && _DBG_MemoryCount != 0)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_FREE_REALLOC, _DBG_ERRORMES_REALLOC, "NewMemoryList");
+        return;
+    }
+
+    _DBG_MemoryList = NewMemoryList;
+
+    // Add time to remove time
+    uint64_t EndTime = clock();
+    _DBG_CurrentSession->removeTime += EndTime - StartTime;
+}
+
+_DBG_Memory **_DBG_FindPointer(void *Pointer)
+{
+    // Find pointer
+    extern _DBG_Memory **_DBG_MemoryList;
+    extern uint32_t _DBG_MemoryCount;
+
+    _DBG_Memory **StartList = _DBG_MemoryList;
+    _DBG_Memory **EndList = _DBG_MemoryList + _DBG_MemoryCount;
+
+    while (EndList - StartList > 1)
+    {
+        _DBG_Memory **CenterList = StartList + (EndList - StartList) / 2;
+
+        if ((*CenterList)->pointer <= Pointer)
+            StartList = CenterList;
+
+        else
+            EndList = CenterList;
+    }
+
+    // Return pointer if it is correct
+    if ((*StartList)->pointer == Pointer)
+        return StartList;
+
+    return NULL;
 }
 
 #endif
