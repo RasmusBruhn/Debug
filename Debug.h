@@ -171,7 +171,8 @@ enum DBG_ErrorID
     DBG_ERRORID_PRINTMEMORY_LONG = 0x10010100,
     DBG_ERRORID_MALLOC_MEMORY = 0x10011200,
     DBG_ERRORID_MALLOC_TRACKER = 0x10011301,
-    DBG_ERRORID_MALLOC_REALLOC = 0x10011302
+    DBG_ERRORID_MALLOC_REALLOC = 0x10011302,
+    DBG_ERRORID_MALLOC_RUNNINGLOG = 0x10011303
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory: \"%s\""
@@ -221,6 +222,9 @@ enum DBG_Flags
 #define _DBG_RUNNINGLOG_STARTSESSION "%*.lu: Started session \"%s\"\n"
 #define _DBG_RUNNINGLOG_ENDSESSION "%*.lu: Ended session   \"%s\", TotalTime = %lu, OwnTime = %lu\n"
 #define _DBG_RUNNINGLOG_MEMORYLEAK "%*.lu: Memory leak %s\n"
+#define _DBG_RUNNINGLOG_MALLOC "%*.lu: Allocated memory \"%s\" (%p), size = %u\n"
+#define _DBG_RUNNINGLOG_REALLOC "%*.lu: Reallocated memory \"%s\" (%p -> %p), size = %u -> %u\n"
+#define _DBG_RUNNINGLOG_FREE "%*.lu: Allocated memory \"%s\" (%p), size = %u\n"
 
 // struct print max length
 #define DBG_PRINTSTRUCT_MAXLENGTH 1000
@@ -769,7 +773,7 @@ char *_DBG_PrintMemory(const _DBG_Memory *Memory)
     sprintf(HistoryString, "%s", _DBG_PrintList_uint32(Memory->history, Memory->depth));
 
     // Print everything to a string
-    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{name = %s, pointer = %p, size = %u, history = %s, depth = %u}",
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{name = %s, pointer = %p, size = %lu, history = %s, depth = %u}",
                               Memory->name, Memory->pointer, Memory->size, HistoryString, Memory->depth);
 
     // Show if it was too long
@@ -1430,7 +1434,7 @@ void DBG_Quit(void)
         {
             // Write to running log
             if (_DBG_RunningLog != NULL)
-                if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_MEMORYLEAK, 13, _DBG_PrintMemory(*List)) < 0)
+                if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_MEMORYLEAK, 13, clock(), _DBG_PrintMemory(*List)) < 0)
                     _DBG_AddErrorForeign(DBG_ERRORID_QUIT_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
 
             // Write to profile log
@@ -1656,6 +1660,11 @@ void *DBG_Malloc(size_t Size, char *Name)
 {
     extern _DBG_Memory **_DBG_MemoryList;
     extern uint32_t _DBG_MemoryCount;
+    extern _DBG_Session *_DBG_CurrentSession;
+    extern FILE *_DBG_RunningLog;
+
+    // Get time
+    uint64_t StartTime = clock();
 
     // Allocate memory
     void *Memory = malloc(Size);
@@ -1698,8 +1707,18 @@ void *DBG_Malloc(size_t Size, char *Name)
 
     *List = Tracker;
 
+    // Print to log
+    if (_DBG_RunningLog != NULL)
+        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_MALLOC, 14 + Tracker->depth, StartTime, Name, Memory, Size) < 0)
+            _DBG_AddErrorForeign(DBG_ERRORID_MALLOC_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
+
+    // Add to remove time
+    uint64_t EndTime = clock();
+
+    _DBG_CurrentSession->removeTime += EndTime - StartTime;
+
     return Memory;
-}ADD LOGGING AND UPDATE OWNTIME FOR CURRENT FUNCTION
+}
 
 void *DBG_Realloc(void *Pointer, size_t Size)
 {

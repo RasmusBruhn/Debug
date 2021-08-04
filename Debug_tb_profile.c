@@ -20,7 +20,7 @@ int main(int argc, char **argv)
 
     if (ProfileLog == NULL)
         printf("Error creating profile log: %s\n\n", strerror(errno));
-
+    
     // DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD | DBG_FLAGS_MIN | DBG_FLAGS_MAX | DBG_FLAGS_LIST;
     uint64_t Flags = DBG_FLAGS_TIME | DBG_FLAGS_OWNTIME | DBG_FLAGS_TOTAL | DBG_FLAGS_AVG | DBG_FLAGS_STD | DBG_FLAGS_MIN | DBG_FLAGS_MAX | DBG_SortFlag(DBG_FLAGS_AVG) | DBG_SortFlag(DBG_FLAGS_INVERT);
 
