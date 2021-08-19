@@ -168,17 +168,17 @@ enum DBG_ErrorID
     DBG_ERRORID_PRINTSUBSTATS_LONG = 0x1000E0100,
     DBG_ERRORID_CREATEMEMORY_MALLOC = 0x1000F0200,
     DBG_ERRORID_CREATEMEMORY_MALLOC2 = 0x1000F0201,
-    DBG_ERRORID_PRINTMEMORY_LONG = 0x10010100,
-    DBG_ERRORID_MALLOC_MEMORY = 0x10011200,
-    DBG_ERRORID_MALLOC_TRACKER = 0x10011301,
-    DBG_ERRORID_MALLOC_REALLOC = 0x10011302,
-    DBG_ERRORID_MALLOC_RUNNINGLOG = 0x10011303,
-    DBG_ERRORID_REALLOC_POINTER = 0x100012200,
-    DBG_ERRORID_REALLOC_REALLOC = 0x100012201,
-    DBG_ERRORID_REALLOC_RUNNINGLOG = 0x100012302,
-    DBG_ERRORID_FREE_POINTER = 0x100013100,
-    DBG_ERRORID_FREE_REALLOC = 0x100013301,
-    DBG_ERRORID_FREE_RUNNINGLOG = 0x100013302
+    DBG_ERRORID_PRINTMEMORY_LONG = 0x100100100,
+    DBG_ERRORID_MALLOC_MEMORY = 0x100101200,
+    DBG_ERRORID_MALLOC_TRACKER = 0x100110301,
+    DBG_ERRORID_MALLOC_REALLOC = 0x100110302,
+    DBG_ERRORID_MALLOC_RUNNINGLOG = 0x100110303,
+    DBG_ERRORID_REALLOC_POINTER = 0x1000120200,
+    DBG_ERRORID_REALLOC_REALLOC = 0x1000120201,
+    DBG_ERRORID_REALLOC_RUNNINGLOG = 0x1000120302,
+    DBG_ERRORID_FREE_POINTER = 0x1000130100,
+    DBG_ERRORID_FREE_REALLOC = 0x1000130301,
+    DBG_ERRORID_FREE_RUNNINGLOG = 0x1000130302
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory: \"%s\""
@@ -186,7 +186,7 @@ enum DBG_ErrorID
 #define _DBG_ERRORMES_NOINIT "Debugging has not been initialised"
 #define _DBG_ERRORMES_FOUNDNULL "Found a stray NULL pointer in %s"
 #define _DBG_ERRORMES_ALREADYINIT "Debugging has already been initialised"
-#define _DBG_ERRORMES_LONGPRINT "The printed message was too long and was truncated, length was %u with max length of %u"
+#define _DBG_ERRORMES_LONGPRINT "The printed message was too long and was truncated, length was %I32u with max length of %I32u"
 #define _DBG_ERRORMES_OPENSESSIONS "There are still open sessions"
 #define _DBG_ERRORMES_ARGNULL "Argument \"%s\" was NULL"
 #define _DBG_ERRORMES_CREATESTRUCT "Unable to create \"%s\" struct"
@@ -226,12 +226,12 @@ enum DBG_Flags
 #define _DBG_PROFILETEXT_OWNTIME "Own Time"
 
 // Running log messages
-#define _DBG_RUNNINGLOG_STARTSESSION "%*.lu: Started session \"%s\"\n"
-#define _DBG_RUNNINGLOG_ENDSESSION "%*.lu: Ended session   \"%s\", TotalTime = %lu, OwnTime = %lu\n"
-#define _DBG_RUNNINGLOG_MEMORYLEAK "%*.lu: Memory leak %s\n"
-#define _DBG_RUNNINGLOG_MALLOC "%*.lu: Allocated memory \"%s\" (%p), size = %u\n"
-#define _DBG_RUNNINGLOG_REALLOC "%*.lu: Reallocated memory \"%s\" (%p -> %p), size = %u -> %u\n"
-#define _DBG_RUNNINGLOG_FREE "%*.lu: Allocated memory \"%s\" (%p), size = %u\n"
+#define _DBG_RUNNINGLOG_STARTSESSION "%*.I64u: Started session \"%s\"\n"
+#define _DBG_RUNNINGLOG_ENDSESSION "%*.I64u: Ended session   \"%s\", TotalTime = %I64u, OwnTime = %I64u\n"
+#define _DBG_RUNNINGLOG_MEMORYLEAK "%*.I64u: Memory leak %s\n"
+#define _DBG_RUNNINGLOG_MALLOC "%*.I64u: Allocated memory \"%s\" (%p), size = %I32u\n"
+#define _DBG_RUNNINGLOG_REALLOC "%*.I64u: Reallocated memory \"%s\" (%p -> %p), size = %I32u -> %I32u\n"
+#define _DBG_RUNNINGLOG_FREE "%*.I64u: Freed memory \"%s\" (%p), size = %I32u\n"
 
 // struct print max length
 #define DBG_PRINTSTRUCT_MAXLENGTH 1000
@@ -1494,7 +1494,7 @@ void DBG_Quit(void)
 uint64_t DBG_StartSession(char *Name)
 {
     uint64_t StartTime = clock();
-
+    
     extern uint32_t _DBG_FunctionCount;
     extern _DBG_FunctionData **_DBG_Functions;
 
@@ -1714,11 +1714,16 @@ void *DBG_Malloc(size_t Size, char *Name)
     _DBG_MemoryList = NewMemoryList;
 
     // Insert the new tracker
-    _DBG_Memory **List = NULL;
+    _DBG_Memory **List = _DBG_MemoryList + _DBG_MemoryCount++;
 
-    for (List = _DBG_MemoryList + _DBG_MemoryCount++; List > _DBG_MemoryList; --List)
+    for (; List > _DBG_MemoryList; --List)
+    {
         if ((*(List - 1))->pointer < Memory)
             break;
+
+        else
+            *List = *(List - 1);
+    }
 
     *List = Tracker;
 
@@ -1824,9 +1829,6 @@ void DBG_Free(void *Pointer)
     // Get time
     uint64_t StartTime = clock();
 
-    // Free the memory
-    free(Pointer);
-
     _DBG_Memory **List = _DBG_FindPointer(Pointer);
 
     if (List == NULL)
@@ -1835,12 +1837,15 @@ void DBG_Free(void *Pointer)
         return;
     }
 
+    // Free the memory
+    free(Pointer);
+
     // Print to log
     extern _DBG_Session *_DBG_CurrentSession;
     extern FILE *_DBG_RunningLog;
 
     if (_DBG_RunningLog != NULL)
-        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_FREE, 14 + _DBG_CurrentSession->depth, StartTime, (*List)->name, (*List)->pointer) < 0)
+        if (fprintf(_DBG_RunningLog, _DBG_RUNNINGLOG_FREE, 14 + _DBG_CurrentSession->depth, StartTime, (*List)->name, (*List)->pointer, (*List)->size) < 0)
             _DBG_AddErrorForeign(DBG_ERRORID_FREE_RUNNINGLOG, _DBG_ERRORMES_WRITEFILE, "RunningLog");
 
     // Free the memory used
@@ -1901,8 +1906,8 @@ _DBG_Memory **_DBG_FindPointer(void *Pointer)
 #ifndef DEBUG_INACTIVE_H_INCLUDED
 #define DEBUG_INACTIVE_H_INCLUDED
 
-// Error function should always return NULL
-#define DBG_GetError() NULL
+// Error function should always return strerror
+#define DBG_GetError() strerror(errno)
 
 // Init and quit should alwas return no error
 #define DBG_Init(ProfileLog, RunningLog, ErrorLog, Flags, Precision) 0
@@ -1911,6 +1916,11 @@ _DBG_Memory **_DBG_FindPointer(void *Pointer)
 // Start and end session always return no error
 #define DBG_StartSession(Name) 0
 #define DBG_EndSession() 0
+
+// Malloc, Realloc and Free
+#define DBG_Malloc(Size, Name) malloc(Size)
+#define DBG_Realloc(Pointer, Size, Name) realloc(Pointer, Size)
+#define DBG_Free(Pointer) free(Pointer)
 
 #endif
 #endif
