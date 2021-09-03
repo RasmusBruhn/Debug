@@ -54,9 +54,9 @@ The flags are used in the initialisation to tell the program what you want in th
 
 ## <a id="Macros">Macros</a>
 ----------------------------------------------------------------------------------------------------
-<a id="DBG_ACTIVE">DBG_ACTIVE</a>: Define this macro before including the debugging library to activate it.
+<a id="DBG_ACTIVE">**DBG_ACTIVE**</a>: Define this macro before including the debugging library to activate it.
 
-<a id="DBG_EXITFUNC">DBG_EXITFUNC</a>: This macro should be a function pointer to an exit function if a bad error has occured, read more about the syntax of this in the ErrorHandling documentation. It must be be defined before included the debugging library.
+<a id="DBG_EXITFUNC">**DBG_EXITFUNC**</a>: This macro should be a function pointer to an exit function if a bad error has occured, read more about the syntax of this in the ErrorHandling documentation. It must be be defined before included the debugging library.
 
 ----------------------------------------------------------------------------------------------------
 
