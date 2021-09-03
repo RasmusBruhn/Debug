@@ -1,11 +1,11 @@
 //#define DBG_ACTIVE
 // If it is active
 #ifdef DBG_ACTIVE
-#ifndef DEBUG_ACTIVE_H_INCLUDED
-#define DEBUG_ACTIVE_H_INCLUDED
+#ifndef __DBG_ACTIVE_INCLUDED
+#define __DBG_ACTIVE_INCLUDED
 
-#ifndef DEBUG_INACTIVE_H_INCLUDED
-#define DEBUG_INACTIVE_H_INCLUDED
+#ifndef __DBG_INACTIVE_INCLUDED
+#define __DBG_INACTIVE_INCLUDED
 #else
 
 #ifdef DBG_GetError
@@ -1903,8 +1903,8 @@ _DBG_Memory **_DBG_FindPointer(void *Pointer)
 
 #endif
 #else
-#ifndef DEBUG_INACTIVE_H_INCLUDED
-#define DEBUG_INACTIVE_H_INCLUDED
+#ifndef __DBG_INACTIVE_INCLUDED
+#define __DBG_INACTIVE_INCLUDED
 
 // Error function should always return strerror
 #define DBG_GetError() strerror(errno)
