@@ -1,3 +1,11 @@
+// Add local memory
+// - Update session struct
+// - Update memory struct
+// - Create local memory functions
+// - Update EndSession function
+// Add overflow check function
+
+
 //#define DBG_ACTIVE
 // If it is active
 #ifdef DBG_ACTIVE
@@ -50,6 +58,7 @@ typedef struct __DBG_FunctionData _DBG_FunctionData;
 typedef struct __DBG_Stats _DBG_Stats;
 typedef struct __DBG_SubStats _DBG_SubStats;
 typedef struct __DBG_Memory _DBG_Memory;
+typedef struct __DBG_LocalMemory _DBG_LocalMemory;
 
 // Data for a session, a session starts when a function is executed and ends when the function is done
 struct __DBG_Session
@@ -61,6 +70,7 @@ struct __DBG_Session
     _DBG_Session *child;        // What session is running inside this session, NULL if it doesn't have another session running
     _DBG_Session *parent;       // What session is this session running in, NULL if it doesn't run in another session
     uint32_t depth;             // How many sessions are above this one, 1 when there are none above it
+    _DBG_LocalMemory local;     // A linked list of all the local memory allocated in this session, the first element is a buffer and does not contain a memory
 };
 
 // All the important data for the functions used
@@ -101,6 +111,15 @@ struct __DBG_Memory
     uint32_t depth;             // The depth of the current session
     void *pointer;              // The pointer to the allocated memory
     size_t size;                // The size of the allocated memory
+    _DBG_LocalMemory *local;    // If it is not a local memory then it is NULL otherwise it points to the local memory struct associated with this memory
+};
+
+// A linked list of memory structs
+struct __DBG_LocalMemory
+{
+    _DBG_Memory *memory;        // The memory struct pointed to
+    _DBG_LocalMemory *next;     // The next element in the list
+    _DBG_LocalMemory *prev;     // The previous element in the list
 };
 
 // Contants
@@ -178,7 +197,9 @@ enum DBG_ErrorID
     DBG_ERRORID_REALLOC_RUNNINGLOG = 0x1000120302,
     DBG_ERRORID_FREE_POINTER = 0x1000130100,
     DBG_ERRORID_FREE_REALLOC = 0x1000130301,
-    DBG_ERRORID_FREE_RUNNINGLOG = 0x1000130302
+    DBG_ERRORID_FREE_RUNNINGLOG = 0x1000130302,
+    DBG_ERRORID_CREATELOCALMEMORY_MALLOC = 0x1000140200,
+    DBG_ERRORID_PRINTLOCALMEMORY_LONG = 0x1000150100
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory: \"%s\""
@@ -307,6 +328,13 @@ _DBG_Stats *_DBG_CreateStats(uint32_t ID);
 // Size: The size of the block of memory
 _DBG_Memory *_DBG_CreateMemory(char *Name, void *Pointer, size_t Size);
 
+// Allocates memory for and initialises a LocalMemory struct
+// Returns a pointer to the struct, NULL on error
+// Memory: The memory struct pointed to
+// Prev: The previous LocalMemory struct in the list
+// Next: The next LocalMemory struct in the list
+_DBG_LocalMemory *_DBG_CreateLocalMemory(_DBG_Memory *Memory, _DBG_LocalMemory *Prev, _DBG_LocalMemory *Next);
+
 // Frees a Session struct and all memory allocated for it
 // Session: The struct to free
 void _DBG_DestroySession(_DBG_Session *Session);
@@ -322,6 +350,10 @@ void _DBG_DestroyStats(_DBG_Stats *Stats);
 // Frees a Memory struct and all memory allocated for it
 // Memory: The struct to free
 void _DBG_DestroyMemory(_DBG_Memory *Memory);
+
+// Freed a LocalMemory struct and all memory allocated for it
+// LocalMemory: The struct to free
+void _DBG_DestroyLocalMemory(_DBG_LocalMemory *LocalMemory);
 
 // Adds ... onto a string if it is too long
 // String: The string to add ... to
@@ -365,6 +397,12 @@ char *_DBG_PrintSubStats(const _DBG_SubStats *Stats);
 // Returns a pointer to the string
 // Memory: The struct to turn into a string
 char *_DBG_PrintMemory(const _DBG_Memory *Memory);
+
+// Turns a LocalMemory struct into a string
+// Returns the string or NULL on error
+// LocalMemory: The struct to convert
+// ShowMemory: True if it should print the memory struct associated with this local memory, false if it should only display the pointer
+char *_DBG_PrintLocalMemory(const _DBG_LocalMemory *LocalMemory, bool ShowMemory);
 
 // Calculates the stats for a list of times
 // Returns nothing
@@ -454,6 +492,9 @@ _DBG_Session *_DBG_CreateSession(uint32_t ID, _DBG_Session *Parent, uint32_t Dep
     Session->subTime = 0;
     Session->removeTime = 0;
     Session->child = NULL;
+    Session->local.memory = NULL;
+    Session->local.next = NULL;
+    Session->local.prev = NULL;
 
     // Set input values
     Session->ID = ID;
@@ -534,6 +575,7 @@ _DBG_Memory *_DBG_CreateMemory(char *Name, void *Pointer, size_t Size)
     Memory->pointer = Pointer;
     Memory->size = Size;
     Memory->depth = _DBG_CurrentSession->depth;
+    Memory->local = NULL;
 
     // Fill in the history
     _DBG_Session *CurrentSession = _DBG_CurrentSession;
@@ -547,8 +589,39 @@ _DBG_Memory *_DBG_CreateMemory(char *Name, void *Pointer, size_t Size)
     return Memory;
 }
 
+_DBG_LocalMemory *_DBG_CreateLocalMemory(_DBG_Memory *Memory, _DBG_LocalMemory *Prev, _DBG_LocalMemory *Next)
+{
+    // Get memory
+    _DBG_LocalMemory *LocalMemory = (_DBG_LocalMemory *)malloc(sizeof(_DBG_LocalMemory));
+
+    if (LocalMemory == NULL)
+    {
+        _DBG_AddErrorForeign(DBG_ERRORID_CREATELOCALMEMORY_MALLOC, strerror(errno), _DBG_ERRORMES_MALLOC, "LocalMemory");
+        return NULL;
+    }
+
+    // Fill in values
+    LocalMemory->memory = Memory;
+    LocalMemory->prev = Prev;
+    LocalMemory->next = Next;
+
+    return LocalMemory;
+}
+
 void _DBG_DestroySession(_DBG_Session *Session)
 {
+    // Free all the local memory
+    _DBG_LocalMemory *Local = Session->local.next;
+    _DBG_LocalMemory *NextLocal = NULL;
+
+    while (Local != NULL)
+    {
+        NextLocal = Local->next;
+        _DBG_DestroyLocalMemory(Local);
+        Local = NextLocal;
+    }
+
+    // Free the session
     free(Session);
 }
 
@@ -576,6 +649,11 @@ void _DBG_DestroyMemory(_DBG_Memory *Memory)
         free(Memory->history);
 
     free(Memory);
+}
+
+void _DBG_DestroyLocalMemory(_DBG_LocalMemory *LocalMemory)
+{
+    free(LocalMemory);
 }
 
 void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End)
@@ -796,6 +874,32 @@ char *_DBG_PrintMemory(const _DBG_Memory *Memory)
     }
 
     return _DBG_PrintStructString;
+}
+
+char *_DBG_PrintLocalMemory(const _DBG_LocalMemory *LocalMemory, bool ShowMemory)
+{
+    // Determine how to print the memory
+    char PrintMemory[DBG_PRINTSTRUCT_MAXLENGTH] = "";
+    int32_t Length = 0;
+
+    if (ShowMemory)
+        Length = snprintf(PrintMemory, DBG_PRINTSTRUCT_MAXLENGTH, "%s", _DBG_PrintMemory(LocalMemory->memory));
+
+    else
+        Length = snprintf(PrintMemory, DBG_PRINTSTRUCT_MAXLENGTH, "%p", LocalMemory->memory);
+
+    extern char _DBG_PrintStructString[];
+
+    Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{memory = %s, prev = %p, next = %p}", PrintMemory, LocalMemory->prev, LocalMemory->next);
+
+    if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
+    {
+        _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
+        _DBG_SetError(DBG_ERRORID_PRINTLOCALMEMORY_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
+    }
+
+    return _DBG_PrintStructString;
+
 }
 
 void _DBG_CalcStats(_DBG_SubStats *Stats, uint64_t *List, uint32_t Count)
