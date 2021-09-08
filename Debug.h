@@ -5,7 +5,6 @@
 // - Update EndSession function
 // Add overflow check function
 
-
 //#define DBG_ACTIVE
 // If it is active
 #ifdef DBG_ACTIVE
@@ -361,17 +360,29 @@ void _DBG_DestroyLocalMemory(_DBG_LocalMemory *LocalMemory);
 // End: A string to append to the end after ...
 void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End);
 
+// Prints a list of any type
+// Return: A pointer to the string
+// List: A pointer to the first element of the list
+// NextElement: A function which takes in the pointer to List and a count which starts at 0 and increment by 1 each call, it then updates the current element and returns the printed element, must return NULL when done
+char *_DBG_PrintList(void *List, char *(*NextElement)(void **CurrentElement, uint32_t Count));
+
+// Gets the next element of a uint64 list and prints the current element
+// Return: The string of the current element
+// CurrentElement: A pointer to the list
+// Count: The number of the current element
+char *_DBG_NextElement_uint64(uint64_t **CurrentElement, uint32_t Count);
+
 // Turns a list of uint64_t into a string
 // Returns a pointer to the string
 // List: The list of numbers to print
 // Count: The length of the list
-char *_DBG_PrintList_uint64(const uint64_t *List, uint32_t Count);
+//char *_DBG_PrintList_uint64(const uint64_t *List, uint32_t Count);
 
 // Turns a list of uint32_t into a string
 // Returns a pointer to the string
 // List: The list of numbers to print
 // Count: The length of the list
-char *_DBG_PrintList_uint32(const uint32_t *List, uint32_t Count);
+//char *_DBG_PrintList_uint32(const uint32_t *List, uint32_t Count);
 
 // Turns a Session struct into a string
 // Returns a pointer to the string
@@ -670,6 +681,75 @@ void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End)
     sprintf(String + MaxLength - (1 + EndLength), "%s", End);
 }
 
+char *_DBG_PrintList(void *List, char *(*NextElement)(void **CurrentElement, uint32_t Count))
+{
+    extern char _DBG_PrintStructString[];
+
+    char PrintedStruct[DBG_PRINTSTRUCT_MAXLENGTH] = "";
+
+    int32_t Length = snprintf(PrintedStruct, DBG_PRINTSTRUCT_MAXLENGTH, "[");
+    char *String = PrintedStruct + Length;
+    int32_t MaxLength = DBG_PRINTSTRUCT_MAXLENGTH - Length;
+
+    uint32_t Count = 0;
+
+    for (; true; ++Count)
+    {
+        // Check if there are too many elements
+        if (Count >= DBG_PRINTSTRUCT_LISTMAXLENGTH)
+        {
+            _DBG_PrintTooLong(String, 5, "]");
+            break;
+        }
+
+        // Get string
+        char *ReceivedString = NextElement(&List, Count);
+
+        if (ReceivedString == NULL)
+            break;
+
+        // Print the element
+        Length = snprintf(String, MaxLength, "%s, ", *ReceivedString);
+        String += Length;
+        MaxLength -= Length;
+
+        if (MaxLength <= 4)
+        {
+            _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
+            _DBG_SetError(DBG_ERRORID_PRINTLIST_LONG, _DBG_ERRORMES_LONGPRINT, DBG_PRINTSTRUCT_MAXLENGTH - MaxLength, DBG_PRINTSTRUCT_MAXLENGTH - 5);
+
+            break;
+        }
+    }
+
+    // Add ending bracket
+    if (Count == 0)
+    {
+        *String = ']';
+        *(String + 1) = '\0';
+    }
+
+    else if (Count <= DBG_PRINTSTRUCT_LISTMAXLENGTH)
+    {
+        *(String - 2) = ']';
+        *(String - 1) = '\0';
+    }
+
+    // Copy String
+    sprintf(_DBG_PrintStructString, "%s", PrintedStruct);
+
+    return _DBG_PrintStructString;
+}
+
+char *_DBG_NextElement_uint64(uint64_t **CurrentElement, uint32_t Count)
+{
+    extern char _DBG_PrintStructString[];
+
+    // Print number
+    int32_t Length = snprintf(_DBG_PrintStructString, "%")
+}
+
+/*
 char *_DBG_PrintList_uint64(const uint64_t *List, uint32_t Count)
 {
     extern char _DBG_PrintStructString[];
@@ -715,8 +795,8 @@ char *_DBG_PrintList_uint64(const uint64_t *List, uint32_t Count)
     }
 
     return _DBG_PrintStructString;
-}
-
+}*/
+/*
 char *_DBG_PrintList_uint32(const uint32_t *List, uint32_t Count)
 {
     extern char _DBG_PrintStructString[];
@@ -762,7 +842,7 @@ char *_DBG_PrintList_uint32(const uint32_t *List, uint32_t Count)
     }
 
     return _DBG_PrintStructString;
-}
+}*/
 
 char *_DBG_PrintSession(const _DBG_Session *Session)
 {
@@ -899,7 +979,6 @@ char *_DBG_PrintLocalMemory(const _DBG_LocalMemory *LocalMemory, bool ShowMemory
     }
 
     return _DBG_PrintStructString;
-
 }
 
 void _DBG_CalcStats(_DBG_SubStats *Stats, uint64_t *List, uint32_t Count)
