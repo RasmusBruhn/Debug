@@ -59,6 +59,14 @@ typedef struct __DBG_SubStats _DBG_SubStats;
 typedef struct __DBG_Memory _DBG_Memory;
 typedef struct __DBG_LocalMemory _DBG_LocalMemory;
 
+// A linked list of memory structs
+struct __DBG_LocalMemory
+{
+    _DBG_Memory *memory;        // The memory struct pointed to
+    _DBG_LocalMemory *next;     // The next element in the list
+    _DBG_LocalMemory *prev;     // The previous element in the list
+};
+
 // Data for a session, a session starts when a function is executed and ends when the function is done
 struct __DBG_Session
 {
@@ -111,14 +119,6 @@ struct __DBG_Memory
     void *pointer;              // The pointer to the allocated memory
     size_t size;                // The size of the allocated memory
     _DBG_LocalMemory *local;    // If it is not a local memory then it is NULL otherwise it points to the local memory struct associated with this memory
-};
-
-// A linked list of memory structs
-struct __DBG_LocalMemory
-{
-    _DBG_Memory *memory;        // The memory struct pointed to
-    _DBG_LocalMemory *next;     // The next element in the list
-    _DBG_LocalMemory *prev;     // The previous element in the list
 };
 
 // Contants
@@ -198,7 +198,9 @@ enum DBG_ErrorID
     DBG_ERRORID_FREE_REALLOC = 0x1000130301,
     DBG_ERRORID_FREE_RUNNINGLOG = 0x1000130302,
     DBG_ERRORID_CREATELOCALMEMORY_MALLOC = 0x1000140200,
-    DBG_ERRORID_PRINTLOCALMEMORY_LONG = 0x1000150100
+    DBG_ERRORID_PRINTLOCALMEMORY_LONG = 0x1000150100,
+    DBG_ERRORID_NEXTELEMENTUINT64_LONG = 0x1000160100,
+    DBG_ERRORID_NEXTELEMENTUINT32_LONG = 0x1000170100
 };
 
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory: \"%s\""
@@ -363,14 +365,21 @@ void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End);
 // Prints a list of any type
 // Return: A pointer to the string
 // List: A pointer to the first element of the list
+// MaxLength: The maximum number of elements to print (-1 for infinite, the NextElement function decides)
 // NextElement: A function which takes in the pointer to List and a count which starts at 0 and increment by 1 each call, it then updates the current element and returns the printed element, must return NULL when done
-char *_DBG_PrintList(void *List, char *(*NextElement)(void **CurrentElement, uint32_t Count));
+char *_DBG_PrintList(void *List, uint32_t MaxCount, char *(*NextElement)(void **CurrentElement));
 
 // Gets the next element of a uint64 list and prints the current element
 // Return: The string of the current element
 // CurrentElement: A pointer to the list
 // Count: The number of the current element
-char *_DBG_NextElement_uint64(uint64_t **CurrentElement, uint32_t Count);
+char *_DBG_NextElement_uint64(void **CurrentElement);
+
+// Gets the next element of a uint64 list and prints the current element
+// Return: The string of the current element
+// CurrentElement: A pointer to the list
+// Count: The number of the current element
+char *_DBG_NextElement_uint32(void **CurrentElement);
 
 // Turns a list of uint64_t into a string
 // Returns a pointer to the string
@@ -681,7 +690,7 @@ void _DBG_PrintTooLong(char *String, uint32_t MaxLength, const char *End)
     sprintf(String + MaxLength - (1 + EndLength), "%s", End);
 }
 
-char *_DBG_PrintList(void *List, char *(*NextElement)(void **CurrentElement, uint32_t Count))
+char *_DBG_PrintList(void *List, uint32_t MaxCount, char *(*NextElement)(void **CurrentElement))
 {
     extern char _DBG_PrintStructString[];
 
@@ -693,7 +702,7 @@ char *_DBG_PrintList(void *List, char *(*NextElement)(void **CurrentElement, uin
 
     uint32_t Count = 0;
 
-    for (; true; ++Count)
+    for (; Count < MaxCount; ++Count)
     {
         // Check if there are too many elements
         if (Count >= DBG_PRINTSTRUCT_LISTMAXLENGTH)
@@ -703,7 +712,7 @@ char *_DBG_PrintList(void *List, char *(*NextElement)(void **CurrentElement, uin
         }
 
         // Get string
-        char *ReceivedString = NextElement(&List, Count);
+        char *ReceivedString = NextElement(&List);
 
         if (ReceivedString == NULL)
             break;
@@ -741,12 +750,36 @@ char *_DBG_PrintList(void *List, char *(*NextElement)(void **CurrentElement, uin
     return _DBG_PrintStructString;
 }
 
-char *_DBG_NextElement_uint64(uint64_t **CurrentElement, uint32_t Count)
+char *_DBG_NextElement_uint64(void **CurrentElement)
 {
     extern char _DBG_PrintStructString[];
 
     // Print number
-    int32_t Length = snprintf(_DBG_PrintStructString, "%")
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "%I64u", *((*(uint64_t **)CurrentElement)++));
+
+    if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
+    {
+        _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
+        _DBG_SetError(DBG_ERRORID_NEXTELEMENTUINT64_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
+    }
+
+    return _DBG_PrintStructString;
+}
+
+char *_DBG_NextElement_uint32(void **CurrentElement)
+{
+    extern char _DBG_PrintStructString[];
+
+    // Print number
+    int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "%I32u", *((*(uint32_t **)CurrentElement)++));
+
+    if (Length >= DBG_PRINTSTRUCT_MAXLENGTH)
+    {
+        _DBG_PrintTooLong(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "");
+        _DBG_SetError(DBG_ERRORID_NEXTELEMENTUINT32_LONG, _DBG_ERRORMES_LONGPRINT, Length, DBG_PRINTSTRUCT_MAXLENGTH - 1);
+    }
+
+    return _DBG_PrintStructString;
 }
 
 /*
@@ -870,8 +903,8 @@ char *_DBG_PrintFunctionData(const _DBG_FunctionData *FunctionData)
     char TimeString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
     char OwnTimeString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
 
-    sprintf(TimeString, "%s", _DBG_PrintList_uint64(FunctionData->time, FunctionData->count));
-    sprintf(OwnTimeString, "%s", _DBG_PrintList_uint64(FunctionData->ownTime, FunctionData->count));
+    sprintf(TimeString, "%s", _DBG_PrintList(FunctionData->time, FunctionData->count, &_DBG_NextElement_uint64));
+    sprintf(OwnTimeString, "%s", _DBG_PrintList(FunctionData->ownTime, FunctionData->count, &_DBG_NextElement_uint64));
 
     // Print the struct
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{ID = %u, name = \"%s\", count = %u, time = %s, ownTime = %s}",
@@ -917,7 +950,7 @@ char *_DBG_PrintSubStats(const _DBG_SubStats *Stats)
 
     char ListString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
 
-    sprintf(ListString, "%s", _DBG_PrintList_uint64(Stats->list, Stats->count));
+    sprintf(ListString, "%s", _DBG_PrintList(Stats->list, Stats->count, &_DBG_NextElement_uint64));
 
     // Create the string
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{total = %.*g, avg = %.*g, std = %.*g, min = %.*g, max = %.*g, list = %s}", 
@@ -940,7 +973,7 @@ char *_DBG_PrintMemory(const _DBG_Memory *Memory)
     // Get string for history
     char HistoryString[DBG_PRINTSTRUCT_MAXLENGTH] = "";
 
-    sprintf(HistoryString, "%s", _DBG_PrintList_uint32(Memory->history, Memory->depth));
+    sprintf(HistoryString, "%s", _DBG_PrintList(Memory->history, Memory->depth, &_DBG_NextElement_uint32));
 
     // Print everything to a string
     int32_t Length = snprintf(_DBG_PrintStructString, DBG_PRINTSTRUCT_MAXLENGTH, "{name = %s, pointer = %p, size = %lu, history = %s, depth = %u}",
