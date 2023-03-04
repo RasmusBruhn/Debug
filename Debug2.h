@@ -60,7 +60,7 @@ void _DBG_MemoryRemove(void *Pointer);
 // File: The file to write to
 void DBG_MemoryLog(FILE *File);
 
-// Prints a list of all still allocated memory
+// Prints a list of all still allocated memory, cannot be run twice
 #define DBG_MemoryPrint() DBG_MemoryLog(stdout)
 
 _DBG_MemoryBlock *_DBG_MemoryList = NULL;
