@@ -19,9 +19,9 @@ typedef struct __DBG_MemoryBlock _DBG_MemoryBlock;
 
 struct __DBG_MemoryBlock
 {
-    void *addr;
+    const void *addr;
     size_t size;
-    char *file;
+    const char *file;
     size_t line;
     _DBG_MemoryBlock *next;
 };
@@ -50,11 +50,11 @@ void _DBG_Free(void *Pointer);
 // File: The name of the file
 // Line: The line number of this function call
 // Pointer: The pointer to the memory block
-void _DBG_MemoryAdd(const char *File, size_t Line, void *Pointer, size_t Size);
+void _DBG_MemoryAdd(const char *File, size_t Line, const void *Pointer, size_t Size);
 
 // Removes a memory block from the list of traked memory
 // Pointer: The pointer to the memory block
-void _DBG_MemoryRemove(void *Pointer);
+void _DBG_MemoryRemove(const void *Pointer);
 
 // Writes a list of all still allocated memory to a file, cannot be run twice
 // File: The file to write to
@@ -102,7 +102,7 @@ void _DBG_Free(void *Pointer)
     _DBG_MemoryRemove(Pointer);
 }
 
-void _DBG_MemoryAdd(const char *File, size_t Line, void *Pointer, size_t Size)
+void _DBG_MemoryAdd(const char *File, size_t Line, const void *Pointer, size_t Size)
 {
     extern _DBG_MemoryBlock *_DBG_MemoryList;
 
@@ -126,7 +126,7 @@ void _DBG_MemoryAdd(const char *File, size_t Line, void *Pointer, size_t Size)
     _DBG_MemoryList = NewMemory;
 }
 
-void _DBG_MemoryRemove(void *Pointer)
+void _DBG_MemoryRemove(const void *Pointer)
 {
     extern _DBG_MemoryBlock *_DBG_MemoryList;
 
