@@ -1,5 +1,5 @@
 # Debug documentation
-This is the documentation for the "Debug2" header file (DBG). This overwrites the standard malloc, realloc and free and adds in a list of all the allocated memory which at the end of the program can be retrieved to check for memory leaks.
+This is the documentation for the "Debug2" header file (DBG). This overwrites the standard malloc, realloc and free and adds in a list of all the allocated memory which at the end of the program can be retrieved to check for memory leaks and overflow errors. It is not guarenteed to catch overflow errors.
 
 ## Setup
 ---
