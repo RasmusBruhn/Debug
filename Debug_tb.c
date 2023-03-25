@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdint.h>
 #include "Debug2.h"
 
 int main(int argc, char **argv)
