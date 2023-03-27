@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <stdint.h>
+#include <Defines.h>
 #include "_Debug2.h"
 
 // List of all allocated memory
@@ -190,7 +191,7 @@ void DBG_MemoryLog(FILE *File)
     while (_DBG_MemoryList != NULL)
     {
         // Print it
-        fprintf(File, "%p, size: %lu, file: \"%s\", line: %lu\n", _DBG_MemoryList->addr, _DBG_MemoryList->size, _DBG_MemoryList->file, _DBG_MemoryList->line);
+        fprintf(File, "%p, size: " PRINT_UINT64 ", file: \"%s\", line: " PRINT_UINT64 "\n", _DBG_MemoryList->addr, _DBG_MemoryList->size, _DBG_MemoryList->file, _DBG_MemoryList->line);
 
         // Free memory
         _DBG_MemoryBlock *TempList = _DBG_MemoryList->next;
@@ -207,7 +208,7 @@ void DBG_MemoryLog(FILE *File)
         const char *Type = ((List->type == _DBG_OVERFLOW_START) ? ("underflow") : ("overflow"));
 
         // Print
-        fprintf(File, "%p, size: %lu, file: \"%s\", line: %lu, type: %s, value: ", List->addr, List->size, List->file, List->line, Type);
+        fprintf(File, "%p, size: " PRINT_UINT64 ", file: \"%s\", line: " PRINT_UINT64 ", type: %s, value: ", List->addr, List->size, List->file, List->line, Type);
 
         for (uint8_t *Value = List->value + _DBG_CHECKVALUESIZE - 1, *StartValue = (uint8_t *)List->value; Value >= StartValue; --Value)
             fprintf(File, "%02X", *Value);
