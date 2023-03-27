@@ -1,2 +1,4 @@
-Debug_tb
+*_tb
+*.o
+*.dll
 *.exe

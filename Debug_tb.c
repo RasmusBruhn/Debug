@@ -1,7 +1,8 @@
 #include <stdio.h>
+#include <stdint.h>
 #include "Debug2.h"
 
-int main(int argc, char **argv)
+int main(__attribute__((unused)) int argc, __attribute__((unused)) char **argv)
 {
     // Allocate memory and free it
     void *Memory1 = malloc(10);
