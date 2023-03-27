@@ -1,4 +1,4 @@
-OPT = -O0
+OPT = -O3
 WARNINGS = -Wall -Wextra
 LIBRARY = -I../Library -L. -L../Library/libs
 OPTIONS = -g
