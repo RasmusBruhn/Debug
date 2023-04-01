@@ -6,7 +6,7 @@
 #include "Debug2.h"
 
 #define ERR_PREFIX DBG
-#include <Error2.c>
+#include "Error2.c"
 #define _DBG_ErrorSet(Format, ...) __DBG_ErrorSet(__FILE__, __LINE__ __VA_OPT__(, ) Format, __VA_ARGS__)
 #define _DBG_ErrorAdd(Format, ...) __DBG_ErrorAdd(__FILE__, __LINE__ __VA_OPT__(, ) Format, __VA_ARGS__)
 #define _DBG_ErrorAddExternal(ExternalMessage, Format, ...) __DBG_ErrorAddExternal(__FILE__, __LINE__, ExternalMessage, Format __VA_OPT__(, ) __VA_ARGS__)
