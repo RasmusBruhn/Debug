@@ -9,6 +9,11 @@
 #include <Error2.h>
 #endif
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 // Allocates memory with malloc but keeps track of allocated memory
 // Returns the allocated buffer
 // File: The name of the file
@@ -41,6 +46,10 @@ void DBG_MemoryLog(FILE *File);
 #define malloc(Size) _DBG_Malloc(__FILE__, __LINE__, Size)
 #define realloc(Pointer, Size) _DBG_Realloc(__FILE__, __LINE__, Pointer, Size)
 #define free(Pointer) _DBG_Free(Pointer)
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

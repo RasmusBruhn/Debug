@@ -11,6 +11,11 @@
 #define _DBG_ErrorAdd(Format, ...) __DBG_ErrorAdd(__FILE__, __LINE__ __VA_OPT__(, ) Format, __VA_ARGS__)
 #define _DBG_ErrorAddExternal(ExternalMessage, Format, ...) __DBG_ErrorAddExternal(__FILE__, __LINE__, ExternalMessage, Format __VA_OPT__(, ) __VA_ARGS__)
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 #define _DBG_ERRORMES_MALLOC "Unable to allocate memory (size: %lu)"
 #define _DBG_ERRORMES_REALLOC "Unable to reallocate memory (size: %lu)"
 #define _DBG_ERRORMES_LOCATEPOINTER "Unable to find pointer in list: %p"
@@ -59,5 +64,9 @@ void _DBG_MemoryAdd(const char *File, size_t Line, void *Pointer, size_t Size);
 // Removes a memory block from the list of traked memory
 // Pointer: The pointer to the memory block
 void _DBG_MemoryRemove(const void *Pointer);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

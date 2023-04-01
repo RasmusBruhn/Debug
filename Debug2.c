@@ -1,3 +1,6 @@
+#ifndef DEBUG_DEFINED3
+#define DEBUG_DEFINED3
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -6,6 +9,11 @@
 #include <stdint.h>
 #include <Defines.h>
 #include "_Debug2.h"
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 // List of all allocated memory
 _DBG_MemoryBlock *_DBG_MemoryList = NULL;
@@ -220,3 +228,9 @@ void DBG_MemoryLog(FILE *File)
     _DBG_OverflowList = NULL;
     _DBG_OverflowLength = 0;
 }
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
